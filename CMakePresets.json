@@ -1,0 +1,71 @@
+{
+  "version": 3,
+
+  "configurePresets": [
+    {
+      "name": "debug-ninja",
+      "displayName": "Debug (Ninja)",
+      "generator": "Ninja",
+      "binaryDir": "build/debug-ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "release-ninja",
+      "displayName": "Release (Ninja)",
+      "generator": "Ninja",
+      "binaryDir": "build/release-ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "debug-make",
+      "displayName": "Debug (Unix Makefiles)",
+      "generator": "Unix Makefiles",
+      "binaryDir": "build/debug-make",
+      "condition": {
+        "type": "inList",
+        "string": "${hostSystemName}",
+        "list": ["Linux", "Darwin"]
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "release-make",
+      "displayName": "Release (Unix Makefiles)",
+      "generator": "Unix Makefiles",
+      "binaryDir": "build/release-make",
+      "condition": {
+        "type": "inList",
+        "string": "${hostSystemName}",
+        "list": ["Linux", "Darwin"]
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    }
+  ],
+
+  "buildPresets": [
+    {
+      "name": "debug-ninja",
+      "configurePreset": "debug-ninja"
+    },
+    {
+      "name": "release-ninja",
+      "configurePreset": "release-ninja"
+    },
+    {
+      "name": "debug-make",
+      "configurePreset": "debug-make"
+    },
+    {
+      "name": "release-make",
+      "configurePreset": "release-make"
+    }
+  ]
+}
