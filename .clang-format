@@ -1,0 +1,44 @@
+---
+BasedOnStyle: LLVM
+Standard: Latest
+
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ColumnLimit: 100
+
+BreakBeforeBraces: Allman
+BraceWrapping:
+  AfterFunction: true
+  AfterClass: true
+  AfterStruct: true
+  AfterEnum: true
+  AfterControlStatement: true
+  AfterNamespace: true
+
+PointerAlignment: Left
+ReferenceAlignment: Left
+QualifierAlignment: Left
+
+AlwaysBreakTemplateDeclarations: Yes
+RequiresClausePosition: OwnLine
+IndentRequiresClause: true
+
+BinPackArguments: false
+BinPackParameters: false
+AllowAllArgumentsOnNextLine: false
+AllowAllParametersOfDeclarationOnNextLine: false
+
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortBlocksOnASingleLine: Never
+AllowShortFunctionsOnASingleLine: Inline
+
+AlignAfterOpenBracket: Align
+AlignOperands: false
+AlignTrailingComments: false
+AlignConsecutiveAssignments: None
+AlignConsecutiveDeclarations: None
+
+SortIncludes: true
+IncludeBlocks: Regroup

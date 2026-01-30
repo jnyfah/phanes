@@ -1,188 +1,132 @@
-# antares
+Core Data Structures (FIRST — non-negotiable)
 
-`antares` is an **experimental command-line tool** built to explore and practice **modern C++ (C++23)** features in a realistic, systems-style project.
+Why first?
+Everything depends on them.
+CLI parsing is useless without something to configure.
 
-This project is **not** meant to be a polished end-user utility.
-It is a **learning and experimentation playground** for:
+You define:
 
-- modern C++ design principles
-- expressive data modeling
-- concurrency and async abstractions
-- clean separation of concerns
-- performance-aware code
+FileNode
 
-The focus is on **how** the code is written, not just **what** it does.
+DirectoryNode
 
----
+ErrorRecord
 
-## Project Goals
+No filesystem code yet.
+No CLI yet.
+Just types.
 
-This project exists to experiment with and gain hands-on experience in:
+If these are wrong, everything else will be painful.
 
-- **Modern C++ style**
-  - RAII and value semantics
-  - move semantics and ownership
-  - expressive APIs and readability
+2️⃣ Traversal & Model Construction (SECOND)
 
-- **C++17 / C++20 / C++23 features**
-  - `std::filesystem`
-  - `std::optional`, `std::variant`, `std::expected`
-  - `std::chrono`
-  - ranges and views
-  - concepts
-  - modules
-  - `std::format`
+Now you answer:
 
-- **Concurrency & async**
-  - `std::jthread`
-  - `std::stop_token`
-  - atomics
-  - coroutines (generators, async tasks)
-  - experimentation with **senders / receivers** (where supported)
+“Given a path, how do I build the tree model?”
 
-- **Architecture**
-  - layered design (data -> analysis -> orchestration -> presentation)
-  - testable, composable components
-  - minimal global state
+Implement:
+DirectoryNode build_tree(const std::filesystem::path&, ErrorCollector&);
 
----
 
-## What `antares` Does
+Rules:
 
-`antares` analyzes a directory by:
+no printing
 
-1. **Building an in-memory model** of the directory tree
-2. **Running analytical reports** on that model
-3. **Presenting results** in human-readable (or machine-readable) form
+no analysis
 
-The filesystem traversal and the analysis are **explicitly separated**.
+no formatting
 
----
+no flags
 
-## Supported Reports
+Just:
 
-- Global summary (file count, directory count, total size)
-- File type / extension distribution
-- Top-N largest files
-- Recently modified files
-- Directory size ranking
-- Directory structure statistics (depth, density)
-- Empty / trivial directories
-- Error and anomaly report (permission issues, broken symlinks, etc.)
+collect data
 
-Reports are independent and can be enabled selectively via CLI flags.
+record errors
 
----
+return a value
 
-## Command-Line Usage
+This gives you a solid foundation.
 
-```bash
-diranalyze <path> [options]
-```
+3️⃣ Analysis Layer (THIRD)
 
-CLI Flags
-Core
+Now you write pure functions:
 
---help — show help
+SummaryReport summarize(const DirectoryNode&);
+TypeReport by_type(const DirectoryNode&);
+TopFilesReport top_files(const DirectoryNode&, size_t N);
 
---version — show version
 
---summary — global summary (default if no report flags are provided)
+Rules:
 
-Reports
+no filesystem
 
---by-type — file extension distribution
+no CLI
 
---top N — top-N largest files
+no output
 
---recent <duration> — recently modified files (7d, 12h, etc.)
+deterministic input → output
 
---dirs — directory size ranking
+This layer is where:
 
---structure — directory structure statistics
+ranges shine
 
---empty — empty / trivial directories
+algorithms live
 
---errors — error and anomaly report
+correctness is tested
 
-Output
+4️⃣ CLI Parsing (FOURTH — intentionally late)
 
---format <text|json> — output format (default: text)
+Now that you know:
 
---output <file> — write output to file
+what reports exist
 
---quiet — suppress non-essential output
+what parameters they need
 
-Performance & Behavior
+You can sensibly parse CLI flags into:
 
---threads N — number of worker threads
+struct Config {
+    path root;
+    bool summary;
+    bool by_type;
+    std::optional<size_t> top_n;
+    std::optional<Duration> recent;
+    ...
+};
 
---progress — show progress updates
 
---cancel-on-error — stop on first fatal error
+Parsing earlier is a trap — you’ll rewrite it.
 
-Requirements
-Language & Compiler
+5️⃣ Orchestration (FIFTH)
 
-C++23
+This is the glue, not the logic.
 
-A compiler with good C++23 support:
+int main(int argc, char** argv) {
+    Config cfg = parse_cli(argc, argv);
+    DirectoryNode tree = build_tree(cfg.root);
+    run_requested_reports(tree, cfg);
+    format_and_print_results(...);
+}
 
-GCC 13+
 
-Clang 16+
+This layer:
 
-MSVC (latest)
+decides what runs
 
-Build System
+decides parallelism
 
-CMake 3.26+
+handles cancellation
 
-Ninja (recommended, but optional)
+handles progress
 
-Platform
+6️⃣ Output & Formatting (LAST)
 
-Linux
+Only now do you touch:
 
-macOS
+std::format
 
-Windows (tested via MSVC / clang-cl)
+text vs JSON
 
-Building the Project
-Configure
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+output files
 
-
-(You may use another generator if preferred.)
-
-Build
-cmake --build build
-
-Installing (Optional)
-
-To install the executable locally:
-
-cmake --install build
-
-
-This typically installs diranalyze into /usr/local/bin (platform-dependent).
-
-Running
-
-From the build directory:
-
-./build/diranalyze <path> [options]
-
-
-Or, if installed:
-
-diranalyze <path> [options]
-
-Project Structure (High-Level)
-src/
-  core/        # data models, concepts, utilities
-  fs/          # filesystem traversal & data collection
-  analysis/    # pure analysis functions (reports)
-  async/       # concurrency & coroutine experiments
-  output/      # formatting & presentation
-  app/         # CLI parsing and orchestration
+Why last?

@@ -1,5 +1,14 @@
-#include<iostream>
+import core;
 
 int main() {
-    std::cout <<"Hello world"<< std::endl;
+    output();
 }
+
+
+
+// int main(int argc, char** argv) {
+//     Config cfg = parse_cli(argc, argv);
+//     DirectoryNode tree = build_tree(cfg.root);
+//     run_requested_reports(tree, cfg);
+//     format_and_print_results(...);
+// }
