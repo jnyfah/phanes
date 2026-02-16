@@ -1,4 +1,4 @@
-import core;
+import builder;
 
 int main() {
     output();

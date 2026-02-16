@@ -6,8 +6,9 @@ target_sources(phanes_core
     FILE_SET CXX_MODULES
     FILES
       core/core.ixx
+      builder/builder.ixx
   PRIVATE
-      core/core.cpp
+      builder/builder.cpp
 )
 
 # Executable
