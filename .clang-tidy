@@ -1,0 +1,38 @@
+---
+
+Checks: >
+  bugprone-*,
+  clang-analyzer-*,
+  modernize-*,
+  performance-*
+
+WarningsAsErrors: ''
+HeaderFilterRegex: '.*'
+
+CheckOptions:
+  - key: modernize-use-trailing-return-type
+    value: 'false'
+
+  - key: modernize-use-auto.MinTypeNameLength
+    value: '5'
+
+  - key: bugprone-argument-comment.StrictMode
+    value: 'true'
+
+  - key: bugprone-argument-comment.CommentBoolLiterals
+    value: 'true'
+
+  - key: bugprone-misplaced-widening-cast.CheckImplicitCasts
+    value: 'true'
+
+  - key: bugprone-sizeof-expression.WarnOnSizeOfIntegerExpression
+    value: 'true'
+
+  - key: bugprone-suspicious-string-compare.WarnOnLogicalNotComparison
+    value: 'true'
+
+  - key: readability-uniqueptr-delete-release.PreferResetCall
+    value: 'true'
+
+
+
