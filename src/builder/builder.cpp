@@ -73,11 +73,12 @@ DirectoryTree build_tree(const std::filesystem::path& root)
             if (itr_ec)
             {
                 tree.errors.push_back({curDir.path, ErrorKind::NotFound, NodeKind::Directory});
+                continue;
             }
 
             itr_ec.clear();
             const auto& entry = *it;
-            const auto& symlink = entry.is_symlink(type_ec);
+            bool symlink = entry.is_symlink(type_ec);
 
             if (entry.is_directory(type_ec) && !symlink)
             {
@@ -113,7 +114,7 @@ DirectoryTree build_tree(const std::filesystem::path& root)
                 else
                 {
                     file.size = 0;
-                    tree.errors.push_back({curDir.path, ErrorKind::FileError, NodeKind::File});
+                    tree.errors.push_back({entry.path(), ErrorKind::FileError, NodeKind::File});
                 }
 
                 auto ftime = entry.last_write_time(time_ec);
@@ -126,9 +127,6 @@ DirectoryTree build_tree(const std::filesystem::path& root)
                 {
                     tree.errors.push_back({curDir.path, ErrorKind::FileError, NodeKind::File});
                 }
-
-                auto sysTime = std::chrono::clock_cast<std::chrono::system_clock>(ftime);
-                file.modified = std::chrono::floor<std::chrono::seconds>(sysTime);
 
                 tree.files.push_back(file);
             }
