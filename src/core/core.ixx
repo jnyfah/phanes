@@ -7,7 +7,9 @@ module;
 #include <optional>
 
 export module core;
-export using NodeId = std::uint32_t;
+export using DirectoryId = std::size_t;
+export using FileId = std::size_t;
+
 
 export enum class NodeKind {
     File,
@@ -18,14 +20,15 @@ export enum class ErrorKind {
     PermissionDenied,
     NotFound,
     IOError,
-    Unknown
+    Unknown,
+    FileError
 };
 
 /* ---------- File node ---------- */
 
 export struct FileNode {
-    NodeId id;
-    NodeId parent;
+    FileId id;
+    DirectoryId parent;
 
     std::filesystem::path path;
 
@@ -39,13 +42,13 @@ export struct FileNode {
 /* ---------- Directory node ---------- */
 
 export struct DirectoryNode {
-    NodeId id;
-    std::optional<NodeId> parent;
+    DirectoryId id;
+    std::optional<DirectoryId> parent;
 
     std::filesystem::path path;
 
-    std::vector<NodeId> files;
-    std::vector<NodeId> subdirs;
+    std::vector<FileId> files;
+    std::vector<DirectoryId> subdirs;
 
     bool readable = true;
 };
@@ -61,7 +64,7 @@ export struct ErrorRecord {
 /* ---------- Scan result / tree ---------- */
 
 export struct DirectoryTree {
-    NodeId root;
+    std::optional<DirectoryId> root;
 
     std::vector<FileNode> files;
     std::vector<DirectoryNode> directories;

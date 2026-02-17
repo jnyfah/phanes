@@ -1,10 +1,13 @@
 import builder;
 
-int main() {
-    output();
+#include <iostream>
+
+auto main() -> int
+{
+    auto output = build_tree("/home");
+
+    std::cout << output.directories[0].path;
 }
-
-
 
 // int main(int argc, char** argv) {
 //     Config cfg = parse_cli(argc, argv);
