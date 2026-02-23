@@ -120,12 +120,8 @@ DirectoryTree build_tree(const std::filesystem::path& root)
                 auto ftime = entry.last_write_time(time_ec);
                 if (!time_ec)
                 {
-                    const auto sctp =
-                        std::chrono::time_point_cast<std::chrono::system_clock::duration>(
-                            ftime - decltype(ftime)::clock::now() +
-                            std::chrono::system_clock::now());
-
-                    file.modified = std::chrono::floor<std::chrono::seconds>(sctp);
+                    auto sysTime = std::chrono::clock_cast<std::chrono::system_clock>(ftime);
+                    file.modified = std::chrono::floor<std::chrono::seconds>(sysTime);
                 }
                 else
                 {
