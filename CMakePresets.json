@@ -22,67 +22,14 @@
       }
     },
     {
-      "name": "debug-make",
-      "displayName": "Debug (Unix Makefiles)",
-      "generator": "Unix Makefiles",
-      "binaryDir": "build/debug-make",
-      "condition": {
-        "type": "inList",
-        "string": "${hostSystemName}",
-        "list": [
-          "Linux",
-          "Darwin"
-        ]
-      },
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
-      }
-    },
-    {
-      "name": "release-make",
-      "displayName": "Release (Unix Makefiles)",
-      "generator": "Unix Makefiles",
-      "binaryDir": "build/release-make",
-      "condition": {
-        "type": "inList",
-        "string": "${hostSystemName}",
-        "list": [
-          "Linux",
-          "Darwin"
-        ]
-      },
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
-      }
-    },
-    {
-      "name": "debug-msvc",
-      "displayName": "Debug (MSVC)",
+      "name": "msvc",
+      "displayName": "Visual Studio 2022",
       "generator": "Visual Studio 17 2022",
-      "binaryDir": "build/debug-msvc",
+      "binaryDir": "build/msvc",
       "condition": {
         "type": "equals",
         "lhs": "${hostSystemName}",
         "rhs": "Windows"
-      },
-      "cacheVariables": {
-        "CMAKE_CONFIGURATION_TYPES": "Debug"
-      }
-    },
-    {
-      "name": "release-msvc",
-      "displayName": "Release (MSVC)",
-      "generator": "Visual Studio 17 2022",
-      "binaryDir": "build/release-msvc",
-      "condition": {
-        "type": "equals",
-        "lhs": "${hostSystemName}",
-        "rhs": "Windows"
-      },
-      "cacheVariables": {
-        "CMAKE_CONFIGURATION_TYPES": "Release"
       }
     }
   ],
@@ -96,12 +43,14 @@
       "configurePreset": "release-ninja"
     },
     {
-      "name": "debug-make",
-      "configurePreset": "debug-make"
+      "name": "msvc-debug",
+      "configurePreset": "msvc",
+      "configuration": "Debug"
     },
     {
-      "name": "release-make",
-      "configurePreset": "release-make"
+      "name": "msvc-release",
+      "configurePreset": "msvc",
+      "configuration": "Release"
     }
   ]
 }

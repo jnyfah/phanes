@@ -17,11 +17,11 @@ jobs:
           - os: ubuntu-latest
             preset: release-ninja
 
-          - os: ubuntu-latest
-            preset: release-make
-
           - os: windows-latest
-            preset: release-msvc
+            preset: msvc-release
+
+          - os: macos-latest
+            preset: release-ninja
 
     steps:
       - uses: actions/checkout@v4
