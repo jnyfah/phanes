@@ -1,6 +1,5 @@
 {
   "version": 3,
-
   "configurePresets": [
     {
       "name": "debug-ninja",
@@ -9,7 +8,6 @@
       "binaryDir": "build/debug-ninja",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "CMAKE_CXX_COMPILER": "clang++",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
       }
     },
@@ -20,7 +18,6 @@
       "binaryDir": "build/release-ninja",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_CXX_COMPILER": "clang++",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
       }
     },
@@ -32,7 +29,10 @@
       "condition": {
         "type": "inList",
         "string": "${hostSystemName}",
-        "list": ["Linux", "Darwin"]
+        "list": [
+          "Linux",
+          "Darwin"
+        ]
       },
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
@@ -47,15 +47,45 @@
       "condition": {
         "type": "inList",
         "string": "${hostSystemName}",
-        "list": ["Linux", "Darwin"]
+        "list": [
+          "Linux",
+          "Darwin"
+        ]
       },
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
       }
+    },
+    {
+      "name": "debug-msvc",
+      "displayName": "Debug (MSVC)",
+      "generator": "Visual Studio 17 2022",
+      "binaryDir": "build/debug-msvc",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      },
+      "cacheVariables": {
+        "CMAKE_CONFIGURATION_TYPES": "Debug"
+      }
+    },
+    {
+      "name": "release-msvc",
+      "displayName": "Release (MSVC)",
+      "generator": "Visual Studio 17 2022",
+      "binaryDir": "build/release-msvc",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      },
+      "cacheVariables": {
+        "CMAKE_CONFIGURATION_TYPES": "Release"
+      }
     }
   ],
-
   "buildPresets": [
     {
       "name": "debug-ninja",
