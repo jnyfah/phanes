@@ -26,6 +26,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Install LLVM only on macOS
+      - name: Install LLVM (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          brew install llvm
+          echo "$(brew --prefix llvm)/bin" >> $GITHUB_PATH
+
       - name: Install CMake and Ninja
         uses: lukka/get-cmake@latest
         with:
