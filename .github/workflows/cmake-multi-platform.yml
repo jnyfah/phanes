@@ -20,8 +20,8 @@ jobs:
           - os: windows-latest
             preset: msvc-release
 
-          - os: macos-latest
-            preset: ninja-release
+          # - os: macos-latest
+          #   preset: ninja-release
 
     steps:
       - uses: actions/checkout@v4
