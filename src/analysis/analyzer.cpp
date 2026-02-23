@@ -220,7 +220,8 @@ std::vector<FileId> compute_symlinks(const DirectoryTree& tree)
 }
 
 // TODO
-std::vector<std::size_t> compute_directory_depths(const DirectoryTree& tree, const DirectoryMetrics& metrics)
+std::vector<std::size_t> compute_directory_depths(const DirectoryTree& tree,
+                                                  const DirectoryMetrics& metrics)
 {
     std::vector<std::size_t> depths;
 

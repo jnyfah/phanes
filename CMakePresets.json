@@ -3,10 +3,9 @@
 
   "configurePresets": [
     {
-      "name": "debug-ninja",
-      "displayName": "Debug (Ninja)",
+      "name": "ninja-debug",
       "generator": "Ninja",
-      "binaryDir": "build/debug-ninja",
+      "binaryDir": "build/ninja-debug",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_CXX_COMPILER": "clang++",
@@ -14,10 +13,9 @@
       }
     },
     {
-      "name": "release-ninja",
-      "displayName": "Release (Ninja)",
+      "name": "ninja-release",
       "generator": "Ninja",
-      "binaryDir": "build/release-ninja",
+      "binaryDir": "build/ninja-release",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_CXX_COMPILER": "clang++",
@@ -25,53 +23,35 @@
       }
     },
     {
-      "name": "debug-make",
-      "displayName": "Debug (Unix Makefiles)",
-      "generator": "Unix Makefiles",
-      "binaryDir": "build/debug-make",
+      "name": "msvc-release",
+      "generator": "Visual Studio 17 2022",
+      "binaryDir": "build/msvc",
       "condition": {
-        "type": "inList",
-        "string": "${hostSystemName}",
-        "list": ["Linux", "Darwin"]
-      },
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
-      }
-    },
-    {
-      "name": "release-make",
-      "displayName": "Release (Unix Makefiles)",
-      "generator": "Unix Makefiles",
-      "binaryDir": "build/release-make",
-      "condition": {
-        "type": "inList",
-        "string": "${hostSystemName}",
-        "list": ["Linux", "Darwin"]
-      },
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
       }
     }
   ],
 
   "buildPresets": [
     {
-      "name": "debug-ninja",
-      "configurePreset": "debug-ninja"
+      "name": "ninja-debug",
+      "configurePreset": "ninja-debug"
     },
     {
-      "name": "release-ninja",
-      "configurePreset": "release-ninja"
+      "name": "ninja-release",
+      "configurePreset": "ninja-release"
     },
     {
-      "name": "debug-make",
-      "configurePreset": "debug-make"
+      "name": "msvc-debug",
+      "configurePreset": "msvc-release",
+      "configuration": "Debug"
     },
     {
-      "name": "release-make",
-      "configurePreset": "release-make"
+      "name": "msvc-release",
+      "configurePreset": "msvc-release",
+      "configuration": "Release"
     }
   ]
 }
