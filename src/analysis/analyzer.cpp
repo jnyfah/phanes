@@ -123,7 +123,7 @@ std::vector<DirectoryId> compute_largest_N_Directories(const DirectoryTree& tree
 
     std::vector<std::uintmax_t> dir_sizes(tree.directories.size(), 0);
 
-    for (DirectoryId id = tree.directories.size(); id-- > 0; )
+    for (DirectoryId id = tree.directories.size(); id-- > 0;)
     {
         const auto& dir = tree.directories[id];
 
@@ -137,7 +137,7 @@ std::vector<DirectoryId> compute_largest_N_Directories(const DirectoryTree& tree
         for (DirectoryId Did : dir.subdirs)
         {
             size += dir_sizes[Did];
-;
+            ;
         }
 
         dir_sizes[id] = size;
@@ -151,4 +151,102 @@ std::vector<DirectoryId> compute_largest_N_Directories(const DirectoryTree& tree
 
     dirIds.resize(N);
     return dirIds;
+}
+
+std::vector<FileId> compute_recent_files(const DirectoryTree& tree, std::chrono::seconds duration)
+{
+    if (tree.files.empty())
+    {
+        return {};
+    }
+
+    std::vector<FileId> fileid;
+    fileid.reserve(tree.files.size());
+
+    auto now = std::chrono::floor<std::chrono::seconds>(std::chrono::system_clock::now());
+    auto cutoff = now - duration;
+    for (const auto& file : tree.files)
+    {
+        if (file.modified >= cutoff)
+        {
+            fileid.push_back(file.id);
+        }
+    }
+
+    std::ranges::sort(fileid,
+                      [&](FileId a, FileId b)
+                      { return tree.files[a].modified > tree.files[b].modified; });
+    return fileid;
+}
+
+std::vector<DirectoryId> compute_empty_directories(const DirectoryTree& tree)
+{
+    if (tree.directories.empty())
+    {
+        return {};
+    }
+
+    std::vector<DirectoryId> dirid;
+
+    for (DirectoryId id = 0; id < tree.directories.size(); ++id)
+    {
+        const auto& dir = tree.directories[id];
+
+        if (dir.files.empty())
+        {
+            dirid.push_back(id);
+        }
+
+        for (DirectoryId Did : dir.subdirs)
+        {
+        }
+    }
+
+    return dirid;
+}
+
+std::vector<FileId> compute_symlinks(const DirectoryTree& tree)
+{
+    std::vector<FileId> symid;
+
+    for (const auto& file : tree.files)
+    {
+        if (file.is_symlink)
+        {
+            symid.push_back(file.id);
+        }
+    }
+    return symid;
+}
+
+// TODO
+std::vector<std::size_t> compute_directory_depths(const DirectoryTree& tree, const DirectoryMetrics& metrics)
+{
+    std::vector<std::size_t> depths;
+
+    return depths;
+}
+
+// TODO
+DirectoryMetrics compute_directory_metrics(const DirectoryTree& tree)
+{
+    DirectoryMetrics metrics{};
+    metrics.depth.resize(tree.directories.size());
+    metrics.recursive_size.resize(tree.directories.size());
+    metrics.recursive_file_count.resize(tree.directories.size());
+
+    for (const auto& dir : tree.directories)
+    {
+    }
+
+    return metrics;
+}
+
+// TODO
+DirectoryStats compute_directory_stats(const DirectoryTree& tree)
+{
+
+    DirectoryStats stats{};
+
+    return stats;
 }
