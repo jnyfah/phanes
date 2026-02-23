@@ -45,7 +45,7 @@
     },
     {
       "name": "msvc-debug",
-      "configurePreset": "msvc",
+      "configurePreset": "msvc-release",
       "configuration": "Debug"
     },
     {
