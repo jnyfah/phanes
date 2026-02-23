@@ -1,32 +1,23 @@
 module;
 
-#include <filesystem>
-#include <vector>
-#include <cstdint>
 #include <chrono>
+#include <cstdint>
+#include <filesystem>
 #include <optional>
+#include <vector>
 
 export module core;
 export using DirectoryId = std::size_t;
 export using FileId = std::size_t;
 
+export enum class NodeKind { File, Directory };
 
-export enum class NodeKind {
-    File,
-    Directory
-};
-
-export enum class ErrorKind {
-    PermissionDenied,
-    NotFound,
-    IOError,
-    Unknown,
-    FileError
-};
+export enum class ErrorKind { PermissionDenied, NotFound, IOError, Unknown, FileError };
 
 /* ---------- File node ---------- */
 
-export struct FileNode {
+export struct FileNode
+{
     FileId id;
     DirectoryId parent;
 
@@ -41,7 +32,8 @@ export struct FileNode {
 
 /* ---------- Directory node ---------- */
 
-export struct DirectoryNode {
+export struct DirectoryNode
+{
     DirectoryId id;
     std::optional<DirectoryId> parent;
 
@@ -55,7 +47,8 @@ export struct DirectoryNode {
 
 /* ---------- Error record ---------- */
 
-export struct ErrorRecord {
+export struct ErrorRecord
+{
     std::filesystem::path path;
     ErrorKind kind;
     NodeKind node_kind;
@@ -63,7 +56,8 @@ export struct ErrorRecord {
 
 /* ---------- Scan result / tree ---------- */
 
-export struct DirectoryTree {
+export struct DirectoryTree
+{
     std::optional<DirectoryId> root;
 
     std::vector<FileNode> files;
