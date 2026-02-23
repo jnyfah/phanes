@@ -23,7 +23,7 @@
       }
     },
     {
-      "name": "msvc",
+      "name": "msvc-release",
       "generator": "Visual Studio 17 2022",
       "binaryDir": "build/msvc",
       "condition": {
@@ -50,7 +50,7 @@
     },
     {
       "name": "msvc-release",
-      "configurePreset": "msvc",
+      "configurePreset": "msvc-release",
       "configuration": "Release"
     }
   ]

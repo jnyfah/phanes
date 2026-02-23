@@ -15,13 +15,13 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            preset: release-ninja
+            preset: ninja-release
 
           - os: windows-latest
             preset: msvc-release
 
           - os: macos-latest
-            preset: release-ninja
+            preset: ninja-release
 
     steps:
       - uses: actions/checkout@v4
