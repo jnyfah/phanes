@@ -20,23 +20,8 @@ jobs:
           - os: windows-latest
             preset: msvc-release
 
-          # - os: macos-latest
-          #   preset: ninja-release
-
     steps:
       - uses: actions/checkout@v4
-
-      # Install LLVM only on macOS
-      - name: Install LLVM (macOS)
-        if: matrix.os == 'macos-latest'
-        run: |
-          brew install llvm
-          echo "$(brew --prefix llvm)/bin" >> $GITHUB_PATH
-      
-      - name: Set macOS SDK
-        if: matrix.os == 'macos-latest'
-        run: |
-          echo "SDKROOT=$(xcrun --sdk macosx --show-sdk-path)" >> $GITHUB_ENV
 
       - name: Install CMake and Ninja
         uses: lukka/get-cmake@latest
