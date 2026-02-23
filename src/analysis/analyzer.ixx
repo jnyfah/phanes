@@ -78,8 +78,8 @@ export DirectoryMetrics compute_directory_metrics(const DirectoryTree& tree);
 // unit tests
 // compute_directory_metrics should be called once! atthe start and reused !
 
-
-// - github workflow (should contain claag format and clang timty, and code scan too for duplicity etc)
+// - github workflow (should contain claag format and clang timty, and code scan too for duplicity
+// etc)
 // - cmake preset blog
 
 // doxgye documentaytion
