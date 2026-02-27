@@ -24,7 +24,7 @@ void handle_largest_files(CLIOptions& options,
 {
     if (!str)
     {
-        errors.push_back("Missing value for --largest-files");
+        errors.emplace_back("Missing value for --largest-files");
         return;
     }
     options.largest_files = parse_positive_size(str->data(), errors, "largest-files");
@@ -35,7 +35,7 @@ void handle_largest_dir(CLIOptions& options,
 {
     if (!str)
     {
-        errors.push_back("Missing value for --largest-dir");
+        errors.emplace_back("Missing value for --largest-dir");
         return;
     }
     options.largest_dirs = parse_positive_size(str->data(), errors, "largest-dirs");
@@ -47,7 +47,7 @@ void handle_recent(CLIOptions& options,
 {
     if (!str)
     {
-        errors.push_back("Missing value for --recently modified");
+        errors.emplace_back("Missing value for --recently modified");
         return;
     }
 
@@ -142,7 +142,7 @@ std::optional<size_t> parse_positive_size(std::string_view str,
     }
     else if (ec == std::errc::invalid_argument)
     {
-        errors.push_back("This is not a number.\n");
+        errors.emplace_back("This is not a number.\n");
         return std::nullopt;
     }
     else if (ec == std::errc::result_out_of_range)

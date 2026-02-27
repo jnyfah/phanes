@@ -62,9 +62,11 @@ constexpr std::array flag_table{FlagSpec{"--summary", false, handle_summary},
                                 FlagSpec{"--empty_dirs", false, handle_empty_dir},
                                 FlagSpec{"--symlinks", false, handle_symlinks}};
 
-export auto parse_positive_size(std::string_view, std::vector<std::string>& errors, std::string_view flag_name) -> std::optional<size_t>;
+export auto parse_positive_size(std::string_view,
+                                std::vector<std::string>& errors,
+                                std::string_view flag_name) -> std::optional<size_t>;
 
-                                // if no flang print help
+// if no flang print help
 
 // Parse CLI
 // ↓
