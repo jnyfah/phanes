@@ -8,9 +8,11 @@ target_sources(phanes_core
       core/core.ixx
       builder/builder.ixx
       analysis/analyzer.ixx
+      parser/parser.ixx
   PRIVATE
       builder/builder.cpp
       analysis/analyzer.cpp
+      parser/parser.cpp
 )
 
 # Executable
