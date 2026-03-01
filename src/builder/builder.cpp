@@ -15,8 +15,7 @@ DirectoryTree build_tree(const std::filesystem::path& root)
 
     auto finish = [&]()
     {
-        tree.scan_finished =
-            std::chrono::floor<std::chrono::seconds>(std::chrono::system_clock::now());
+        tree.scan_finished = std::chrono::floor<std::chrono::seconds>(std::chrono::system_clock::now());
         return tree;
     };
 
@@ -62,10 +61,9 @@ DirectoryTree build_tree(const std::filesystem::path& root)
         toprocess.pop();
         std::error_code type_ec, size_ec, time_ec, itr_ec;
 
-        for (std::filesystem::directory_iterator it(
-                 curDir.path,
-                 std::filesystem::directory_options::skip_permission_denied,
-                 itr_ec);
+        for (std::filesystem::directory_iterator it(curDir.path,
+                                                    std::filesystem::directory_options::skip_permission_denied,
+                                                    itr_ec);
              it != std::filesystem::directory_iterator();
              it.increment(itr_ec))
         {

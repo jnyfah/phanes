@@ -41,26 +41,21 @@ struct FlagSpec
 };
 
 export void handle_summary(CLIOptions&, std::optional<std::string_view>, std::vector<std::string>&);
-export void
-handle_largest_files(CLIOptions&, std::optional<std::string_view>, std::vector<std::string>&);
-export void
-handle_largest_dir(CLIOptions&, std::optional<std::string_view>, std::vector<std::string>&);
+export void handle_largest_files(CLIOptions&, std::optional<std::string_view>, std::vector<std::string>&);
+export void handle_largest_dir(CLIOptions&, std::optional<std::string_view>, std::vector<std::string>&);
 export void handle_recent(CLIOptions&, std::optional<std::string_view>, std::vector<std::string>&);
-export void
-handle_extensions(CLIOptions&, std::optional<std::string_view>, std::vector<std::string>&);
-export void
-handle_empty_dir(CLIOptions&, std::optional<std::string_view>, std::vector<std::string>&);
-export void
-handle_symlinks(CLIOptions&, std::optional<std::string_view>, std::vector<std::string>&);
+export void handle_extensions(CLIOptions&, std::optional<std::string_view>, std::vector<std::string>&);
+export void handle_empty_dir(CLIOptions&, std::optional<std::string_view>, std::vector<std::string>&);
+export void handle_symlinks(CLIOptions&, std::optional<std::string_view>, std::vector<std::string>&);
 
 constexpr size_t N = 7;
-constexpr std::array flag_table{FlagSpec{"--summary", false, handle_summary},
-                                FlagSpec{"--largest-files", true, handle_largest_files},
-                                FlagSpec{"--largest-dirs", true, handle_largest_dir},
-                                FlagSpec{"--recent", true, handle_recent},
-                                FlagSpec{"--extensions", false, handle_extensions},
-                                FlagSpec{"--empty_dirs", false, handle_empty_dir},
-                                FlagSpec{"--symlinks", false, handle_symlinks}};
+constexpr std::array<FlagSpec, 7> flag_table{FlagSpec{"--summary", false, handle_summary},
+                                             FlagSpec{"--largest-files", true, handle_largest_files},
+                                             FlagSpec{"--largest-dirs", true, handle_largest_dir},
+                                             FlagSpec{"--recent", true, handle_recent},
+                                             FlagSpec{"--extensions", false, handle_extensions},
+                                             FlagSpec{"--empty_dirs", false, handle_empty_dir},
+                                             FlagSpec{"--symlinks", false, handle_symlinks}};
 
 export auto parse_positive_size(std::string_view,
                                 std::vector<std::string>& errors,

@@ -12,15 +12,11 @@ module;
 
 module parser;
 
-void handle_summary(CLIOptions& options,
-                    std::optional<std::string_view> str,
-                    std::vector<std::string>& errors)
+void handle_summary(CLIOptions& options, std::optional<std::string_view> str, std::vector<std::string>& errors)
 {
     options.summary = true;
 }
-void handle_largest_files(CLIOptions& options,
-                          std::optional<std::string_view> str,
-                          std::vector<std::string>& errors)
+void handle_largest_files(CLIOptions& options, std::optional<std::string_view> str, std::vector<std::string>& errors)
 {
     if (!str)
     {
@@ -29,9 +25,7 @@ void handle_largest_files(CLIOptions& options,
     }
     options.largest_files = parse_positive_size(str->data(), errors, "largest-files");
 }
-void handle_largest_dir(CLIOptions& options,
-                        std::optional<std::string_view> str,
-                        std::vector<std::string>& errors)
+void handle_largest_dir(CLIOptions& options, std::optional<std::string_view> str, std::vector<std::string>& errors)
 {
     if (!str)
     {
@@ -41,9 +35,7 @@ void handle_largest_dir(CLIOptions& options,
     options.largest_dirs = parse_positive_size(str->data(), errors, "largest-dirs");
 }
 
-void handle_recent(CLIOptions& options,
-                   std::optional<std::string_view> str,
-                   std::vector<std::string>& errors)
+void handle_recent(CLIOptions& options, std::optional<std::string_view> str, std::vector<std::string>& errors)
 {
     if (!str)
     {
@@ -97,28 +89,21 @@ void handle_recent(CLIOptions& options,
     }
 }
 
-void handle_extensions(CLIOptions& options,
-                       std::optional<std::string_view> str,
-                       std::vector<std::string>& errors)
+void handle_extensions(CLIOptions& options, std::optional<std::string_view> str, std::vector<std::string>& errors)
 {
     options.extensions = true;
 }
-void handle_empty_dir(CLIOptions& options,
-                      std::optional<std::string_view> str,
-                      std::vector<std::string>& errors)
+void handle_empty_dir(CLIOptions& options, std::optional<std::string_view> str, std::vector<std::string>& errors)
 {
     options.empty_dirs = true;
 }
-void handle_symlinks(CLIOptions& options,
-                     std::optional<std::string_view> str,
-                     std::vector<std::string>& errors)
+void handle_symlinks(CLIOptions& options, std::optional<std::string_view> str, std::vector<std::string>& errors)
 {
     options.symlinks = true;
 }
 
-std::optional<size_t> parse_positive_size(std::string_view str,
-                                          std::vector<std::string>& errors,
-                                          std::string_view flag_name)
+std::optional<size_t>
+parse_positive_size(std::string_view str, std::vector<std::string>& errors, std::string_view flag_name)
 {
 
     if (str.empty())

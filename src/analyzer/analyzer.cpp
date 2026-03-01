@@ -10,7 +10,7 @@ module;
 #include <unordered_map>
 #include <vector>
 
-module analysis;
+module analyzer;
 
 SummaryReport compute_summary(const DirectoryTree& tree)
 {
@@ -24,7 +24,7 @@ SummaryReport compute_summary(const DirectoryTree& tree)
     sum.total_size = 0;
     std::size_t symlink = 0;
     std::uintmax_t current_max = 0;
-    std::optional<FileId> largest_file = std::nullopt;
+    std::optional<FileNode> largest_file = std::nullopt;
 
     for (const auto& file : tree.files)
     {
@@ -36,12 +36,13 @@ SummaryReport compute_summary(const DirectoryTree& tree)
         if (file.size > current_max)
         {
             current_max = file.size;
-            largest_file = file.id;
+            largest_file = file;
         }
     }
 
     sum.total_symlinks = symlink;
     sum.largest_file_size = current_max;
+    sum.largest_file = largest_file;
     sum.total_duration = tree.scan_finished - tree.scan_started;
 
     return sum;
@@ -83,9 +84,7 @@ std::vector<ExtensionStats> compute_extension_stats(const DirectoryTree& tree)
     for (const auto& file : tree.files)
     {
         auto ext = file.path.extension().string();
-        std::ranges::transform(ext,
-                               ext.begin(),
-                               [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        std::ranges::transform(ext, ext.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 
         auto& [first, second] = map[ext];
         ++first;
@@ -103,8 +102,7 @@ std::vector<ExtensionStats> compute_extension_stats(const DirectoryTree& tree)
     }
 
     std::ranges::sort(stats,
-                      [](const ExtensionStats& a, const ExtensionStats& b)
-                      { return a.total_size > b.total_size; });
+                      [](const ExtensionStats& a, const ExtensionStats& b) { return a.total_size > b.total_size; });
 
     return stats;
 }
@@ -146,8 +144,7 @@ std::vector<DirectoryId> compute_largest_N_Directories(const DirectoryTree& tree
     std::ranges::partial_sort(dirIds.begin(),
                               dirIds.begin() + N,
                               dirIds.end(),
-                              [&](DirectoryId a, DirectoryId b)
-                              { return dir_sizes[a] > dir_sizes[b]; });
+                              [&](DirectoryId a, DirectoryId b) { return dir_sizes[a] > dir_sizes[b]; });
 
     dirIds.resize(N);
     return dirIds;
@@ -173,9 +170,7 @@ std::vector<FileId> compute_recent_files(const DirectoryTree& tree, std::chrono:
         }
     }
 
-    std::ranges::sort(fileid,
-                      [&](FileId a, FileId b)
-                      { return tree.files[a].modified > tree.files[b].modified; });
+    std::ranges::sort(fileid, [&](FileId a, FileId b) { return tree.files[a].modified > tree.files[b].modified; });
     return fileid;
 }
 
@@ -220,8 +215,7 @@ std::vector<FileId> compute_symlinks(const DirectoryTree& tree)
 }
 
 // TODO
-std::vector<std::size_t> compute_directory_depths(const DirectoryTree& tree,
-                                                  const DirectoryMetrics& metrics)
+std::vector<std::size_t> compute_directory_depths(const DirectoryTree& tree, const DirectoryMetrics& metrics)
 {
     std::vector<std::size_t> depths;
 

@@ -5,7 +5,7 @@ Standard: Latest
 IndentWidth: 4
 TabWidth: 4
 UseTab: Never
-ColumnLimit: 100
+ColumnLimit: 120
 
 BreakBeforeBraces: Allman
 BraceWrapping:

@@ -5,31 +5,31 @@ module;
 #include <optional>
 #include <string>
 
-export module analysis;
+export module analyzer;
 
 import core;
 
-struct SummaryReport
+export struct SummaryReport
 {
     std::size_t total_directories;
     std::size_t total_files;
     std::uintmax_t total_size;
     std::size_t total_symlinks;
     std::size_t total_errors;
-    std::optional<FileId> largest_file;
+    std::optional<FileNode> largest_file;
     std::uintmax_t largest_file_size;
     std::size_t max_depth;
     std::chrono::seconds total_duration;
 };
 
-struct ExtensionStats
+export struct ExtensionStats
 {
     std::string extension;
     std::size_t count;
     std::uintmax_t total_size;
 };
 
-struct DirectoryStats
+export struct DirectoryStats
 {
     std::size_t max_depth;
     DirectoryId max_files_dir;
@@ -38,7 +38,7 @@ struct DirectoryStats
     double average_files_per_directory;
 };
 
-struct DirectoryMetrics
+export struct DirectoryMetrics
 {
     std::vector<std::size_t> depth;
     std::vector<std::uintmax_t> recursive_size;
@@ -49,13 +49,11 @@ export SummaryReport compute_summary(const DirectoryTree& tree);
 
 export std::vector<FileId> compute_largest_N_Files(const DirectoryTree& tree, std::size_t N);
 
-export std::vector<DirectoryId> compute_largest_N_Directories(const DirectoryTree& tree,
-                                                              std::size_t N);
+export std::vector<DirectoryId> compute_largest_N_Directories(const DirectoryTree& tree, std::size_t N);
 
 export std::vector<ExtensionStats> compute_extension_stats(const DirectoryTree&);
 
-export std::vector<FileId> compute_recent_files(const DirectoryTree& tree,
-                                                std::chrono::seconds duration);
+export std::vector<FileId> compute_recent_files(const DirectoryTree& tree, std::chrono::seconds duration);
 
 export std::vector<DirectoryId> compute_empty_directories(const DirectoryTree& tree);
 
@@ -63,8 +61,7 @@ export std::vector<FileId> compute_symlinks(const DirectoryTree& tree);
 
 export DirectoryStats compute_directory_stats(const DirectoryTree& tree);
 
-export std::vector<std::size_t> compute_directory_depths(const DirectoryTree& tree,
-                                                         const DirectoryMetrics& metrics);
+export std::vector<std::size_t> compute_directory_depths(const DirectoryTree& tree, const DirectoryMetrics& metrics);
 
 export DirectoryMetrics compute_directory_metrics(const DirectoryTree& tree);
 
@@ -85,3 +82,4 @@ export DirectoryMetrics compute_directory_metrics(const DirectoryTree& tree);
 // doxgye documentaytion
 
 // fix includes
+// do you need to use namespaces ?

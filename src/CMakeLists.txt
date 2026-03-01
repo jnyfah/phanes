@@ -7,12 +7,14 @@ target_sources(phanes_core
     FILES
       core/core.ixx
       builder/builder.ixx
-      analysis/analyzer.ixx
+      analyzer/analyzer.ixx
       parser/parser.ixx
+      view/view.ixx
   PRIVATE
       builder/builder.cpp
-      analysis/analyzer.cpp
+      analyzer/analyzer.cpp
       parser/parser.cpp
+      view/view.cpp
 )
 
 # Executable
@@ -23,3 +25,5 @@ add_executable(phanes
 target_link_libraries(phanes
   PRIVATE phanes_core
 )
+
+target_compile_options(phanes PRIVATE -Wno-deprecated-declarations)
