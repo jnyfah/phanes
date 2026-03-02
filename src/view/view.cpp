@@ -1,9 +1,9 @@
 module;
 
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <format>
-#include <array>
 
 module view;
 

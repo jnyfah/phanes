@@ -1,12 +1,12 @@
 module;
 
+#include <array>
 #include <cstddef>
 #include <filesystem>
 #include <optional>
+#include <span>
 #include <string_view>
 #include <vector>
-#include <array>
-#include <span>
 
 export module parser;
 
