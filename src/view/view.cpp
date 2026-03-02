@@ -236,3 +236,21 @@ void print_recent_files(std::ostream& os,
 
     os << '\n';
 }
+
+void print_extension_stats(std::ostream& os, const std::vector<ExtensionStats>& stats)
+{
+    os << std::format("File Extension Statistics ({} types)\n", stats.size());
+    os << "────────────────────────────────────────────────────────\n\n";
+
+    os << std::format("{:<20} {:>12} {:>14}\n", "Extension", "Count", "Total Size");
+
+    os << std::format("{:-<20} {:-<12} {:-<14}\n", "", "", "");
+
+    for (const auto& stat : stats)
+    {
+        std::string ext = stat.extension.empty() ? "[no ext]" : stat.extension;
+        os << std::format("{:<20} {:>12} {:>14}\n", ext, stat.count, format_size(stat.total_size));
+    }
+
+    os << '\n';
+}

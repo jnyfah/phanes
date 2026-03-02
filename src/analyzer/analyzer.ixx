@@ -65,21 +65,17 @@ export std::vector<std::size_t> compute_directory_depths(const DirectoryTree& tr
 
 export DirectoryMetrics compute_directory_metrics(const DirectoryTree& tree);
 
-// calculate total size in terms of GB and KB
-// set up CI/CD
+
 // setup readme
 // add comments
 // Duplicate Size Detector
 // Directory aggregated size
-// remove root from largets N directories
 // unit tests
 // compute_directory_metrics should be called once! atthe start and reused !
-
-// - github workflow (should contain claag format and clang timty, and code scan too for duplicity
-// etc)
 // - cmake preset blog
 
 // doxgye documentaytion
 
 // fix includes
 // do you need to use namespaces ?
+// fix sonarcube
