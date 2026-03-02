@@ -5,6 +5,8 @@ module;
 #include <optional>
 #include <string_view>
 #include <vector>
+#include <array>
+#include <span>
 
 export module parser;
 
