@@ -65,7 +65,6 @@ export std::vector<std::size_t> compute_directory_depths(const DirectoryTree& tr
 
 export DirectoryMetrics compute_directory_metrics(const DirectoryTree& tree);
 
-
 // setup readme
 // add comments
 // Duplicate Size Detector
