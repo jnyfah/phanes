@@ -25,7 +25,7 @@ auto main(int argc, char* argv[]) -> int
         return 0;
     }
 
-    // get out 
+    // get path here before passing to parse?
     auto output = build_tree("/home");
 
     // if (parse_result.options.summary)
