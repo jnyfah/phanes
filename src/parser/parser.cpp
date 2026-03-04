@@ -12,30 +12,51 @@ module;
 
 module parser;
 
-void handle_summary(CLIOptions& options, std::optional<std::string_view> str, std::vector<std::string>& errors)
+void handle_summary(std::vector<Action>& actions, std::optional<std::string_view> str, std::vector<std::string>& errors)
 {
-    options.summary = true;
+    actions.emplace_back(SummaryAction{});
 }
-void handle_largest_files(CLIOptions& options, std::optional<std::string_view> str, std::vector<std::string>& errors)
+
+void handle_largest_files(std::vector<Action>& actions,
+                          std::optional<std::string_view> str,
+                          std::vector<std::string>& errors)
 {
     if (!str)
     {
         errors.emplace_back("Missing value for --largest-files");
         return;
     }
-    options.largest_files = parse_positive_size(str->data(), errors, "largest-files");
+    auto value = parse_positive_size(*str, errors, "--largest-files");
+    if (!value)
+    {
+        errors.emplace_back("Invalid value for --largest-files");
+        return;
+    }
+
+    actions.emplace_back(LargestFilesAction{*value});
 }
-void handle_largest_dir(CLIOptions& options, std::optional<std::string_view> str, std::vector<std::string>& errors)
+
+void handle_largest_dir(std::vector<Action>& actions,
+                        std::optional<std::string_view> str,
+                        std::vector<std::string>& errors)
 {
     if (!str)
     {
-        errors.emplace_back("Missing value for --largest-dir");
+        errors.emplace_back("Missing value for --largest-dirs");
         return;
     }
-    options.largest_dirs = parse_positive_size(str->data(), errors, "largest-dirs");
+
+    auto value = parse_positive_size(*str, errors, "--largest-dirs");
+    if (!value)
+    {
+        errors.emplace_back("Invalid value for --largest-dirs");
+        return;
+    }
+
+    actions.emplace_back(LargestDirsAction{*value});
 }
 
-void handle_recent(CLIOptions& options, std::optional<std::string_view> str, std::vector<std::string>& errors)
+void handle_recent(std::vector<Action>& actions, std::optional<std::string_view> str, std::vector<std::string>& errors)
 {
     if (!str)
     {
@@ -72,34 +93,40 @@ void handle_recent(CLIOptions& options, std::optional<std::string_view> str, std
 
         if (std::tolower(unit) == 'h')
         {
-            options.recent = std::chrono::hours(value);
+            actions.emplace_back(RecentAction{std::chrono::hours(value)});
         }
         else if (std::tolower(unit) == 'm')
         {
-            options.recent = std::chrono::minutes(value);
+            actions.emplace_back(RecentAction{std::chrono::minutes(value)});
         }
         else if (std::tolower(unit) == 's')
         {
-            options.recent = std::chrono::seconds(value);
+            actions.emplace_back(RecentAction{std::chrono::seconds(value)});
         }
         else if (std::tolower(unit) == 'd')
         {
-            options.recent = std::chrono::days(value);
+            actions.emplace_back(RecentAction{std::chrono::days(value)});
         }
     }
 }
 
-void handle_extensions(CLIOptions& options, std::optional<std::string_view> str, std::vector<std::string>& errors)
+void handle_extensions(std::vector<Action>& actions,
+                       std::optional<std::string_view> str,
+                       std::vector<std::string>& errors)
 {
-    options.extensions = true;
+    actions.emplace_back(ExtensionsAction{});
 }
-void handle_empty_dir(CLIOptions& options, std::optional<std::string_view> str, std::vector<std::string>& errors)
+void handle_empty_dir(std::vector<Action>& actions,
+                      std::optional<std::string_view> str,
+                      std::vector<std::string>& errors)
 {
-    options.empty_dirs = true;
+    actions.emplace_back(EmptyDirsAction{});
 }
-void handle_symlinks(CLIOptions& options, std::optional<std::string_view> str, std::vector<std::string>& errors)
+void handle_symlinks(std::vector<Action>& actions,
+                     std::optional<std::string_view> str,
+                     std::vector<std::string>& errors)
 {
-    options.symlinks = true;
+    actions.emplace_back(SymlinksAction{});
 }
 
 std::optional<size_t>
@@ -149,9 +176,8 @@ auto parse(std::span<std::string_view> args) -> ParseResult
         result.errors.push_back("no argument passed");
         return result;
     }
-    result.options.path = args[0];
 
-    size_t i = 1;
+    size_t i = 0;
     while (i < args.size())
     {
         auto token = args[i];
@@ -168,12 +194,12 @@ auto parse(std::span<std::string_view> args) -> ParseResult
                     result.errors.emplace_back(std::move(msg));
                     break;
                 }
-                flag->handler(result.options, args[i], result.errors);
+                flag->handler(result.actions, args[i], result.errors);
                 ++i;
             }
             else
             {
-                flag->handler(result.options, std::nullopt, result.errors);
+                flag->handler(result.actions, std::nullopt, result.errors);
                 ++i;
             }
         }

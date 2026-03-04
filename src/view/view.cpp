@@ -11,7 +11,7 @@ std::string format_size(std::uint64_t bytes)
 {
     constexpr std::array<std::string_view, 6> units{"B", "KB", "MB", "GB", "TB", "PB"};
 
-    double size = static_cast<double>(bytes);
+    auto size = static_cast<double>(bytes);
     std::size_t unit_index = 0;
 
     while (size >= 1024.0 && unit_index < units.size() - 1)
@@ -121,8 +121,6 @@ void print_summary(std::ostream& os, const SummaryReport& report)
     os << std::format("{:<18}: {}\n", "Scan Duration", format_duration(report.total_duration));
 }
 
-#include <format>
-
 void print_largest_files(std::ostream& os, const std::vector<FileId>& files, const DirectoryTree& tree)
 {
     os << std::format("Largest {} Files\n", files.size());
@@ -176,7 +174,7 @@ void print_empty_directories(std::ostream& os, const std::vector<DirectoryId>& d
 
     os << std::format("{:<40}  {}\n", "Directory", "Location");
 
-    os << std::format("{:-<40} {:-<}\n", "", "", "", "");
+    os << std::format("{:-<40} {:-<}\n", "", "");
 
     for (auto dir_id : directories)
     {

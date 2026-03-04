@@ -21,26 +21,48 @@ auto main(int argc, char* argv[]) -> int
     if (!parse_result.success)
     {
 
-        // print help??
+        // Todo: print help function and errors
+        return 0;
     }
 
-    // build the tree
+    // get out 
     auto output = build_tree("/home");
 
-    // we need to know which options we even parsed ??
-    // what if path is not a path ?? i think normalizd handles that
-    // do we need a funtion that takes the tree and the parse results then iterates to
-    // find which options were passed, ehhe then how do we do the ouput ?? we have to pass the
-    // functons to the format output
+    // if (parse_result.options.summary)
+    // {
+    //     const auto& summary = compute_summary(output);
+    //     print_summary(std::cout, summary);
+    // }
+    // if (parse_result.options.empty_dirs)
+    // {
+    //     const auto& empty = compute_empty_directories(output);
+    //     print_empty_directories(std::cout, empty, output);
+    // }
+    // if (parse_result.options.extensions)
+    // {
+    //     const auto& extensions = compute_extension_stats(output);
+    //     print_extension_stats(std::cout, extensions);
+    // }
+    // if (parse_result.options.symlinks)
+    // {
+    //     const auto& symlink = compute_symlinks(output);
+    //     print_symlinks(std::cout, symlink, output);
+    // }
+    // if (parse_result.options.largest_dirs)
+    // {
+    //     const auto& largest_dir = compute_largest_N_Directories(output, parse_result.options.largest_dirs.value());
+    //     print_largest_directories(std::cout, largest_dir, output);
+    // }
+    // if (parse_result.options.largest_files)
+    // {
+    //     const auto& largest_files = compute_largest_N_Files(output, parse_result.options.largest_files.value());
+    //     print_largest_files(std::cout, largest_files, output);
+    // }
+    // if (parse_result.options.recent)
+    // {
+    //     const auto& recent = compute_recent_files(output, parse_result.options.recent.value());
+    //     print_recent_files(std::cout, recent, parse_result.options.recent.value(), output);
+    // }
 
-    auto buds = compute_summary(output);
-    print_summary(std::cout, buds);
-    // auto bud = compute_largest_N_Files(output, 2);
-
-    // std::cout << output.files[bud[0]].path.filename().string();
-    // std::cout << output.files[bud[1]].path.filename().string();
+    return 0;
 }
-// Todo
-// input
-// output format
-//

@@ -2,38 +2,57 @@ module;
 
 #include <array>
 #include <cstddef>
-#include <filesystem>
 #include <optional>
 #include <span>
 #include <string_view>
+#include <variant>
 #include <vector>
+#include <chrono>
 
 export module parser;
 
-struct CLIOptions
+// Each action is self-contained data
+struct SummaryAction
 {
-    std::filesystem::path path;
-
-    bool summary = false;
-
-    std::optional<std::size_t> largest_files;
-    std::optional<std::size_t> largest_dirs;
-
-    bool extensions = false;
-    bool empty_dirs = false;
-    bool symlinks = false;
-
-    std::optional<std::chrono::seconds> recent;
 };
+struct ExtensionsAction
+{
+};
+struct EmptyDirsAction
+{
+};
+struct SymlinksAction
+{
+};
+struct LargestFilesAction
+{
+    std::size_t n;
+};
+struct LargestDirsAction
+{
+    std::size_t n;
+};
+struct RecentAction
+{
+    std::chrono::seconds duration;
+};
+
+using Action = std::variant<SummaryAction,
+                            ExtensionsAction,
+                            EmptyDirsAction,
+                            SymlinksAction,
+                            LargestFilesAction,
+                            LargestDirsAction,
+                            RecentAction>;
 
 struct ParseResult
 {
     bool success = true;
-    CLIOptions options;
+    std::vector<Action> actions;
     std::vector<std::string> errors;
 };
 
-using Handler = void (*)(CLIOptions&, std::optional<std::string_view>, std::vector<std::string>&);
+using Handler = void (*)(std::vector<Action>&, std::optional<std::string_view>, std::vector<std::string>&);
 
 struct FlagSpec
 {
@@ -42,45 +61,25 @@ struct FlagSpec
     Handler handler;
 };
 
-export void handle_summary(CLIOptions&, std::optional<std::string_view>, std::vector<std::string>&);
-export void handle_largest_files(CLIOptions&, std::optional<std::string_view>, std::vector<std::string>&);
-export void handle_largest_dir(CLIOptions&, std::optional<std::string_view>, std::vector<std::string>&);
-export void handle_recent(CLIOptions&, std::optional<std::string_view>, std::vector<std::string>&);
-export void handle_extensions(CLIOptions&, std::optional<std::string_view>, std::vector<std::string>&);
-export void handle_empty_dir(CLIOptions&, std::optional<std::string_view>, std::vector<std::string>&);
-export void handle_symlinks(CLIOptions&, std::optional<std::string_view>, std::vector<std::string>&);
+export void handle_summary(std::vector<Action>&, std::optional<std::string_view>, std::vector<std::string>&);
+export void handle_largest_files(std::vector<Action>&, std::optional<std::string_view>, std::vector<std::string>&);
+export void handle_largest_dir(std::vector<Action>&, std::optional<std::string_view>, std::vector<std::string>&);
+export void handle_recent(std::vector<Action>&, std::optional<std::string_view>, std::vector<std::string>&);
+export void handle_extensions(std::vector<Action>&, std::optional<std::string_view>, std::vector<std::string>&);
+export void handle_empty_dir(std::vector<Action>&, std::optional<std::string_view>, std::vector<std::string>&);
+export void handle_symlinks(std::vector<Action>&, std::optional<std::string_view>, std::vector<std::string>&);
 
 constexpr size_t N = 7;
-constexpr std::array<FlagSpec, 7> flag_table{FlagSpec{"--summary", false, handle_summary},
+constexpr std::array<FlagSpec, N> flag_table{FlagSpec{"--summary", false, handle_summary},
                                              FlagSpec{"--largest-files", true, handle_largest_files},
                                              FlagSpec{"--largest-dirs", true, handle_largest_dir},
                                              FlagSpec{"--recent", true, handle_recent},
                                              FlagSpec{"--extensions", false, handle_extensions},
-                                             FlagSpec{"--empty_dirs", false, handle_empty_dir},
+                                             FlagSpec{"--empty-dirs", false, handle_empty_dir},
                                              FlagSpec{"--symlinks", false, handle_symlinks}};
 
 export auto parse_positive_size(std::string_view,
                                 std::vector<std::string>& errors,
                                 std::string_view flag_name) -> std::optional<size_t>;
-
-// if no flang print help
-
-// Parse CLI
-// ↓
-// Validate flags
-// ↓
-// Build tree once
-// ↓
-// If structural reports requested → compute metrics once
-// ↓
-// Execute selected reports
-// ↓
-// Format output
-
-// Require at least 2 arguments
-// 2️⃣ First argument after program name → path
-// 3️⃣ Remaining arguments → flags
-// 4️⃣ Walk left to right
-// 5️⃣ When flag requires value, consume next token
 
 export auto parse(std::span<std::string_view> args) -> ParseResult;

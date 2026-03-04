@@ -78,3 +78,4 @@ export DirectoryMetrics compute_directory_metrics(const DirectoryTree& tree);
 // fix includes
 // do you need to use namespaces ?
 // fix sonarcube
+// if no flang print help
