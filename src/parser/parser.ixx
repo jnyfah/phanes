@@ -1,13 +1,13 @@
 module;
 
 #include <array>
+#include <chrono>
 #include <cstddef>
 #include <optional>
 #include <span>
 #include <string_view>
 #include <variant>
 #include <vector>
-#include <chrono>
 
 export module parser;
 
