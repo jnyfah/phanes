@@ -22,15 +22,15 @@ std::string format_size(std::uint64_t bytes)
 
     size = std::round(size * 100.0) / 100.0;
 
-    char buffer[64];
-    auto [ptr, ec] = std::to_chars(buffer, buffer + sizeof(buffer), size);
+    std::string buffer(64, '\0');
+    auto [ptr, ec] = std::to_chars(buffer.data(), buffer.data() + buffer.size(), size);
 
     if (ec != std::errc{})
     {
         return std::format("{:.2f} {}", size, units[unit_index]);
     }
 
-    std::string result(buffer, ptr);
+    std::string result(buffer.data(), ptr);
     result += " ";
     result += units[unit_index];
 
@@ -51,12 +51,12 @@ std::string format_duration(std::chrono::seconds total)
     const auto minutes = seconds_total / 60;
     const auto seconds = seconds_total % 60;
 
-    char buffer[64];
-    char* ptr = buffer;
+    std::string buffer(64, '\0');
+    char* ptr = buffer.data();
 
     auto append_number = [&](auto value)
     {
-        auto [p, ec] = std::to_chars(ptr, buffer + sizeof(buffer), value);
+        auto [p, ec] = std::to_chars(ptr, buffer.data() + buffer.size(), value);
         if (ec == std::errc{})
             ptr = p;
     };
@@ -88,7 +88,7 @@ std::string format_duration(std::chrono::seconds total)
         *ptr++ = 's';
     }
 
-    return std::string(buffer, ptr);
+    return std::string(buffer.data(), ptr);
 }
 
 void print_summary(std::ostream& os, const SummaryReport& report)

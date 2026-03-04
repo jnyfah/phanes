@@ -12,6 +12,12 @@ module;
 
 module analyzer;
 
+struct string_hash
+{
+    using is_transparent = void;
+    std::size_t operator()(std::string_view sv) const { return std::hash<std::string_view>{}(sv); }
+};
+
 SummaryReport compute_summary(const DirectoryTree& tree)
 {
 
@@ -78,7 +84,7 @@ std::vector<ExtensionStats> compute_extension_stats(const DirectoryTree& tree)
         return {};
     }
 
-    std::unordered_map<std::string, std::pair<std::size_t, std::uintmax_t>> map;
+    std::unordered_map<std::string, std::pair<std::size_t, std::uintmax_t>, string_hash, std::equal_to<>> map;
 
     for (const auto& file : tree.files)
     {
