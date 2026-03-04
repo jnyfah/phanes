@@ -127,7 +127,7 @@ void print_largest_files(std::ostream& os, const std::vector<FileId>& files, con
     os << "──────────────────────────────\n\n";
 
     os << std::format("{:<40} {:>12}  {}\n", "Filename", "Size", "Location");
-    os << std::format("{:-<40} {:-<12}  {:-<}\n", "", "", "");
+    os << std::format("{:-<40} {:-<12}  {:-<20}\n", "", "", "");
 
     for (const auto file_id : files)
     {
@@ -142,8 +142,6 @@ void print_largest_files(std::ostream& os, const std::vector<FileId>& files, con
     os << '\n';
 }
 
-#include <format>
-
 void print_largest_directories(std::ostream& os, const std::vector<DirectoryId>& directories, const DirectoryTree& tree)
 {
     os << std::format("Largest {} Directories\n", directories.size());
@@ -151,7 +149,7 @@ void print_largest_directories(std::ostream& os, const std::vector<DirectoryId>&
 
     os << std::format("{:<40} {:>12} {:>12}  {}\n", "Directory", "Files", "Subdirs", "Location");
 
-    os << std::format("{:-<40} {:-<12} {:-<12}  {:-<}\n", "", "", "", "");
+    os << std::format("{:-<40} {:-<12} {:-<12}  {:-<20}\n", "", "", "", "");
 
     for (auto dir_id : directories)
     {
@@ -174,7 +172,7 @@ void print_empty_directories(std::ostream& os, const std::vector<DirectoryId>& d
 
     os << std::format("{:<40}  {}\n", "Directory", "Location");
 
-    os << std::format("{:-<40} {:-<}\n", "", "");
+    os << std::format("{:-<40} {:-<20}\n", "", "");
 
     for (auto dir_id : directories)
     {
@@ -192,7 +190,7 @@ void print_symlinks(std::ostream& os, const std::vector<FileId>& files, const Di
     os << "────────────────────────────────────\n\n";
 
     os << std::format("{:<40} {:>12}  {}\n", "Filename", "Size", "Location");
-    os << std::format("{:-<40} {:-<12}  {:-<}\n", "", "", "");
+    os << std::format("{:-<40} {:-<12}  {:-<20}\n", "", "", "");
 
     for (const auto file_id : files)
     {

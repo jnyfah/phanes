@@ -61,9 +61,8 @@ std::vector<FileId> compute_largest_N_Files(const DirectoryTree& tree, std::size
     fileId.resize(tree.files.size());
     std::ranges::iota(fileId.begin(), fileId.end(), 0);
 
-    std::ranges::partial_sort(fileId.begin(),
+    std::ranges::partial_sort(fileId,
                               fileId.begin() + N,
-                              fileId.end(),
                               [&tree](const FileId& a, const FileId& b)
                               { return tree.files[a].size > tree.files[b].size; });
 
@@ -135,15 +134,13 @@ std::vector<DirectoryId> compute_largest_N_Directories(const DirectoryTree& tree
         for (DirectoryId Did : dir.subdirs)
         {
             size += dir_sizes[Did];
-            ;
         }
 
         dir_sizes[id] = size;
     }
 
-    std::ranges::partial_sort(dirIds.begin(),
+    std::ranges::partial_sort(dirIds,
                               dirIds.begin() + N,
-                              dirIds.end(),
                               [&](DirectoryId a, DirectoryId b) { return dir_sizes[a] > dir_sizes[b]; });
 
     dirIds.resize(N);
