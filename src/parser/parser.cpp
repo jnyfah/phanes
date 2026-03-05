@@ -174,40 +174,36 @@ auto parse(std::span<std::string_view> args) -> ParseResult
     if (args.empty())
     {
         result.errors.push_back("no argument passed");
+        result.success = result.errors.empty();
         return result;
     }
+    result.path = args[0];
 
-    size_t i = 0;
+    size_t i = 1;
     while (i < args.size())
     {
         auto token = args[i];
         auto flag = std::ranges::find(flag_table, token, &FlagSpec::name);
-        if (flag != flag_table.end())
-        {
-            if (flag->requires_value)
-            {
-                ++i;
-                if (i >= args.size())
-                {
-                    std::string msg = "Missing value for ";
-                    msg += flag->name;
-                    result.errors.emplace_back(std::move(msg));
-                    break;
-                }
-                flag->handler(result.actions, args[i], result.errors);
-                ++i;
-            }
-            else
-            {
-                flag->handler(result.actions, std::nullopt, result.errors);
-                ++i;
-            }
-        }
-        else
+        if (flag == flag_table.end())
         {
             result.errors.push_back("Unknown option: " + std::string(token));
             ++i;
+            continue;
         }
+
+        std::optional<std::string_view> value = std::nullopt;
+        if (flag->requires_value)
+        {
+            if (++i >= args.size())
+            {
+                result.errors.emplace_back("Missing value for " + std::string(flag->name));
+                break;
+            }
+            value = args[i];
+        }
+
+        flag->handler(result.actions, value, result.errors);
+        ++i;
     }
 
     result.success = result.errors.empty();

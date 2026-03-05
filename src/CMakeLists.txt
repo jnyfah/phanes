@@ -10,6 +10,7 @@ target_sources(phanes_core
       analyzer/analyzer.ixx
       parser/parser.ixx
       view/view.ixx
+      view/executor.ixx
   PRIVATE
       builder/builder.cpp
       analyzer/analyzer.cpp

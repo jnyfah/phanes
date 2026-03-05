@@ -3,6 +3,7 @@ module;
 #include <array>
 #include <chrono>
 #include <cstddef>
+#include <filesystem>
 #include <optional>
 #include <span>
 #include <string_view>
@@ -12,27 +13,27 @@ module;
 export module parser;
 
 // Each action is self-contained data
-struct SummaryAction
+export struct SummaryAction
 {
 };
-struct ExtensionsAction
+export struct ExtensionsAction
 {
 };
-struct EmptyDirsAction
+export struct EmptyDirsAction
 {
 };
-struct SymlinksAction
+export struct SymlinksAction
 {
 };
-struct LargestFilesAction
-{
-    std::size_t n;
-};
-struct LargestDirsAction
+export struct LargestFilesAction
 {
     std::size_t n;
 };
-struct RecentAction
+export struct LargestDirsAction
+{
+    std::size_t n;
+};
+export struct RecentAction
 {
     std::chrono::seconds duration;
 };
@@ -47,6 +48,7 @@ using Action = std::variant<SummaryAction,
 
 struct ParseResult
 {
+    std::filesystem::path path;
     bool success = true;
     std::vector<Action> actions;
     std::vector<std::string> errors;
