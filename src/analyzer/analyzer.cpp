@@ -50,6 +50,7 @@ SummaryReport compute_summary(const DirectoryTree& tree)
     sum.largest_file_size = current_max;
     sum.largest_file = largest_file;
     sum.total_duration = tree.scan_finished - tree.scan_started;
+    // sum.total_empty_dir
 
     return sum;
 }
@@ -177,6 +178,7 @@ std::vector<FileId> compute_recent_files(const DirectoryTree& tree, std::chrono:
     return fileid;
 }
 
+// TODO
 std::vector<DirectoryId> compute_empty_directories(const DirectoryTree& tree)
 {
     if (tree.directories.empty())
@@ -215,6 +217,11 @@ std::vector<FileId> compute_symlinks(const DirectoryTree& tree)
         }
     }
     return symid;
+}
+
+const std::vector<ErrorRecord> get_errors(const DirectoryTree& tree)
+{
+    return tree.errors;
 }
 
 // TODO

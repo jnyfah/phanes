@@ -15,9 +15,10 @@ export struct SummaryReport
     std::size_t total_files;
     std::uintmax_t total_size;
     std::size_t total_symlinks;
+    std::size_t total_empty_dir;
     std::size_t total_errors;
-    std::optional<FileNode> largest_file;
-    std::uintmax_t largest_file_size;
+    std::optional<FileNode> largest_file; // add the location in output
+    std::uintmax_t largest_file_size; // add the location in output ??
     std::size_t max_depth;
     std::chrono::seconds total_duration;
 };
@@ -65,6 +66,8 @@ export std::vector<std::size_t> compute_directory_depths(const DirectoryTree& tr
 
 export DirectoryMetrics compute_directory_metrics(const DirectoryTree& tree);
 
+export const std::vector<ErrorRecord> get_errors(const DirectoryTree& tree);
+
 // setup readme
 // add comments
 // Duplicate Size Detector
@@ -79,3 +82,6 @@ export DirectoryMetrics compute_directory_metrics(const DirectoryTree& tree);
 // do you need to use namespaces ?
 // fix sonarcube
 // if no flang print help
+// terminal width fix for files that have large names
+// home always shows up as largest dir - fix this
+// extensions not formated well

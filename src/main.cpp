@@ -4,6 +4,7 @@ import executor;
 
 #include <iostream>
 #include <string_view>
+#include <variant>
 #include <vector>
 
 auto main(int argc, char* argv[]) -> int
@@ -16,11 +17,17 @@ auto main(int argc, char* argv[]) -> int
         input.emplace_back(argv[i]);
     }
 
-    // we are not printing errors yet why ??
+    // we are not printing errors yet why ?? print error cli
+    // what to print is there no option?? summary or error
+
     const auto& result = parse(input);
     if (!result.success)
     {
-        // Todo: print help function and errors
+        for (const auto& err : result.errors)
+        {
+            std::cerr << err << '\n';
+        }
+        // Todo: print help function
         return 0;
     }
 

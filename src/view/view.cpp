@@ -251,3 +251,56 @@ void print_extension_stats(std::ostream& os, const std::vector<ExtensionStats>& 
 
     os << '\n';
 }
+
+void print_errors(std::ostream& os, const std::vector<ErrorRecord>& errors)
+{
+    if (errors.empty())
+    {
+        os << "No errors recorded.\n";
+        return;
+    }
+
+    auto kind_to_string = [](ErrorKind kind) -> std::string_view
+    {
+        switch (kind)
+        {
+        case ErrorKind::PermissionDenied:
+            return "PermissionDenied";
+        case ErrorKind::NotFound:
+            return "NotFound";
+        case ErrorKind::IOError:
+            return "IOError";
+        case ErrorKind::FileError:
+            return "FileError";
+        case ErrorKind::Unknown:
+            return "Unknown";
+        }
+        return "Unknown";
+    };
+
+    auto node_to_string = [](NodeKind kind) -> std::string_view
+    {
+        switch (kind)
+        {
+        case NodeKind::File:
+            return "File";
+        case NodeKind::Directory:
+            return "Directory";
+        }
+        return "Unknown";
+    };
+
+    os << "Errors\n";
+    os << "──────\n\n";
+
+    os << std::format("{:<18} {:<12} {}\n", "Type", "Node", "Path");
+    os << std::format("{:-<18} {:-<12} {:-<1}\n", "", "", "");
+
+    for (const auto& err : errors)
+    {
+        os << std::format("{:<18} {:<12} {}\n",
+                          kind_to_string(err.kind),
+                          node_to_string(err.node_kind),
+                          err.path.string());
+    }
+}

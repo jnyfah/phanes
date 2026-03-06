@@ -25,6 +25,9 @@ export struct EmptyDirsAction
 export struct SymlinksAction
 {
 };
+export struct ErrorsAction
+{
+};
 export struct LargestFilesAction
 {
     std::size_t n;
@@ -42,6 +45,7 @@ using Action = std::variant<SummaryAction,
                             ExtensionsAction,
                             EmptyDirsAction,
                             SymlinksAction,
+                            ErrorsAction,
                             LargestFilesAction,
                             LargestDirsAction,
                             RecentAction>;
@@ -70,15 +74,17 @@ export void handle_recent(std::vector<Action>&, std::optional<std::string_view>,
 export void handle_extensions(std::vector<Action>&, std::optional<std::string_view>, std::vector<std::string>&);
 export void handle_empty_dir(std::vector<Action>&, std::optional<std::string_view>, std::vector<std::string>&);
 export void handle_symlinks(std::vector<Action>&, std::optional<std::string_view>, std::vector<std::string>&);
+export void handle_errors(std::vector<Action>&, std::optional<std::string_view>, std::vector<std::string>&);
 
-constexpr size_t N = 7;
+constexpr size_t N = 8;
 constexpr std::array<FlagSpec, N> flag_table{FlagSpec{"--summary", false, handle_summary},
                                              FlagSpec{"--largest-files", true, handle_largest_files},
                                              FlagSpec{"--largest-dirs", true, handle_largest_dir},
                                              FlagSpec{"--recent", true, handle_recent},
                                              FlagSpec{"--extensions", false, handle_extensions},
                                              FlagSpec{"--empty-dirs", false, handle_empty_dir},
-                                             FlagSpec{"--symlinks", false, handle_symlinks}};
+                                             FlagSpec{"--symlinks", false, handle_symlinks},
+                                             FlagSpec{"--errors", false, handle_errors}};
 
 export auto parse_positive_size(std::string_view,
                                 std::vector<std::string>& errors,

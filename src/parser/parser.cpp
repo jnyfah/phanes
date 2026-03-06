@@ -23,7 +23,7 @@ void handle_largest_files(std::vector<Action>& actions,
 {
     if (!str)
     {
-        errors.emplace_back("Missing value for --largest-files");
+        errors.emplace_back("Missing number of files for --largest-files");
         return;
     }
     auto value = parse_positive_size(*str, errors, "--largest-files");
@@ -42,7 +42,7 @@ void handle_largest_dir(std::vector<Action>& actions,
 {
     if (!str)
     {
-        errors.emplace_back("Missing value for --largest-dirs");
+        errors.emplace_back("Missing number of directories for --largest-dirs");
         return;
     }
 
@@ -60,7 +60,7 @@ void handle_recent(std::vector<Action>& actions, std::optional<std::string_view>
 {
     if (!str)
     {
-        errors.emplace_back("Missing value for --recently modified");
+        errors.emplace_back("Missing time specification for --recently modified");
         return;
     }
 
@@ -127,6 +127,11 @@ void handle_symlinks(std::vector<Action>& actions,
                      std::vector<std::string>& errors)
 {
     actions.emplace_back(SymlinksAction{});
+}
+
+void handle_errors(std::vector<Action>& actions, std::optional<std::string_view> str, std::vector<std::string>& errors)
+{
+    actions.emplace_back(ErrorsAction{});
 }
 
 std::optional<size_t>

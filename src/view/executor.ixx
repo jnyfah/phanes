@@ -33,4 +33,6 @@ export struct Executor
     {
         print_recent_files(os, compute_recent_files(tree, op.duration), op.duration, tree);
     }
+
+    void operator()(ErrorsAction) const { print_errors(os, get_errors(tree)); }
 };
