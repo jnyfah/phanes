@@ -201,7 +201,7 @@ std::vector<FileId> compute_symlinks(const DirectoryTree& tree)
     return symid;
 }
 
-const std::vector<ErrorRecord> get_errors(const DirectoryTree& tree)
+const std::vector<ErrorRecord>& get_errors(const DirectoryTree& tree)
 {
     return tree.errors;
 }

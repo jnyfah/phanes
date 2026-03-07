@@ -73,13 +73,12 @@ export DirectoryStats compute_directory_stats(const DirectoryTree& tree, const D
 
 export DirectoryMetrics compute_directory_metrics(const DirectoryTree& tree);
 
-export const std::vector<ErrorRecord> get_errors(const DirectoryTree& tree);
+export const std::vector<ErrorRecord>& get_errors(const DirectoryTree& tree);
 
 // setup readme
 // add comments
-// Duplicate Size Detector
+// Duplicate File Detector
 // unit tests
-// compute_directory_metrics should be called once! atthe start and reused !
 // - cmake preset blog
 
 // doxgye documentaytion
@@ -88,4 +87,4 @@ export const std::vector<ErrorRecord> get_errors(const DirectoryTree& tree);
 // do you need to use namespaces ?
 // fix sonarcube
 // terminal width fix for files that have large names
-// extensions not formated well 
+// extensions not formated well
