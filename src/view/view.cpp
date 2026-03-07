@@ -120,6 +120,8 @@ void print_summary(std::ostream& os, const SummaryReport& report)
     os << std::format("{:<18}: {}\n", "Max Depth dir", report.max_depth_dir);
 
     os << std::format("{:<18}: {}\n", "Scan Duration", format_duration(report.total_duration));
+    os << '\n';
+    os << '\n';
 }
 
 void print_largest_files(std::ostream& os, const std::vector<FileId>& files, const DirectoryTree& tree)

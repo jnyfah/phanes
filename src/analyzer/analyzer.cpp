@@ -267,25 +267,46 @@ DirectoryStats compute_directory_stats(const DirectoryTree& tree, const Director
         return stats;
     }
 
+    const DirectoryId root = *tree.root;
+    const auto n = tree.directories.size();
+
     auto max_depth_itr = std::ranges::max_element(metrics.depth);
     stats.max_depth = *max_depth_itr;
     stats.max_depth_dir = static_cast<DirectoryId>(std::distance(metrics.depth.begin(), max_depth_itr));
 
-    auto max_file_count_itr = std::ranges::max_element(metrics.recursive_file_count);
-    stats.max_files_count = *max_file_count_itr;
-    stats.max_files_count_dir =
-        static_cast<DirectoryId>(std::distance(metrics.recursive_file_count.begin(), max_file_count_itr));
+    std::vector<DirectoryId> non_root;
+    non_root.reserve(n - 1);
+    for (DirectoryId id = 0; id < n; ++id)
+    {
+        if (id != root)
+        {
+            non_root.push_back(id);
+        }
+    }
 
-    auto max_file_size_itr = std::ranges::max_element(metrics.recursive_size);
-    stats.max_files_size = *max_file_size_itr;
-    stats.max_files_size_dir =
-        static_cast<DirectoryId>(std::distance(metrics.recursive_size.begin(), max_file_size_itr));
+    auto max_file_count_itr =
+        std::ranges::max_element(non_root,
+                                 [&](DirectoryId a, DirectoryId b)
+                                 { return metrics.recursive_file_count[a] < metrics.recursive_file_count[b]; });
+    stats.max_files_count = metrics.recursive_file_count[*max_file_count_itr];
+    stats.max_files_count_dir = *max_file_count_itr;
 
-    auto depth_sum = std::ranges::fold_left(metrics.depth, std::size_t{0}, std::plus{});
-    auto file_sum = std::ranges::fold_left(metrics.recursive_file_count, std::size_t{0}, std::plus{});
+    auto max_file_size_itr = std::ranges::max_element(
+        non_root,
+        [&](DirectoryId a, DirectoryId b) { return metrics.recursive_size[a] < metrics.recursive_size[b]; });
+    stats.max_files_size = metrics.recursive_size[*max_file_size_itr];
+    stats.max_files_size_dir = *max_file_size_itr;
 
-    stats.average_directory_depth = static_cast<double>(depth_sum) / metrics.depth.size();
-    stats.average_files_per_directory = static_cast<double>(tree.files.size() / tree.directories.size());
+    auto depth_sum = std::ranges::fold_left(non_root,
+                                            std::size_t{0},
+                                            [&](std::size_t acc, DirectoryId id) { return acc + metrics.depth[id]; });
+    auto file_sum =
+        std::ranges::fold_left(non_root,
+                               std::size_t{0},
+                               [&](std::size_t acc, DirectoryId id) { return acc + metrics.recursive_file_count[id]; });
+
+    stats.average_directory_depth = static_cast<double>(depth_sum) / non_root.size();
+    stats.average_files_per_directory = static_cast<double>(file_sum) / non_root.size();
 
     return stats;
 }

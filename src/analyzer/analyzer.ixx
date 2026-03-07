@@ -87,6 +87,5 @@ export const std::vector<ErrorRecord> get_errors(const DirectoryTree& tree);
 // fix includes
 // do you need to use namespaces ?
 // fix sonarcube
-// if no flang print help
 // terminal width fix for files that have large names
-// extensions not formated well
+// extensions not formated well 

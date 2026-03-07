@@ -75,6 +75,8 @@ struct FlagSpec
     std::string_view name;
     bool requires_value;
     Handler handler;
+    std::string_view description;
+    std::string_view value_hint;
 };
 
 export void handle_summary(std::vector<Action>&, std::optional<std::string_view>, std::vector<std::string>&);
@@ -89,19 +91,23 @@ export void handle_metrics(std::vector<Action>&, std::optional<std::string_view>
 export void handle_stats(std::vector<Action>&, std::optional<std::string_view>, std::vector<std::string>&);
 
 constexpr size_t N = 10;
-constexpr std::array<FlagSpec, N> flag_table{FlagSpec{"--summary", false, handle_summary},
-                                             FlagSpec{"--largest-files", true, handle_largest_files},
-                                             FlagSpec{"--largest-dirs", true, handle_largest_dir},
-                                             FlagSpec{"--recent", true, handle_recent},
-                                             FlagSpec{"--extensions", false, handle_extensions},
-                                             FlagSpec{"--empty-dirs", false, handle_empty_dir},
-                                             FlagSpec{"--symlinks", false, handle_symlinks},
-                                             FlagSpec{"--errors", false, handle_errors},
-                                             FlagSpec{"--metrics", false, handle_metrics},
-                                             FlagSpec{"--stats", false, handle_stats}};
+constexpr std::array<FlagSpec, N> flag_table{
+    FlagSpec{"--summary", false, handle_summary, "Show overall scan summary", ""},
+    FlagSpec{"--largest-files", true, handle_largest_files, "List the N largest files", "<N>"},
+    FlagSpec{"--largest-dirs", true, handle_largest_dir, "List the N largest directories", "<N>"},
+    FlagSpec{"--recent", true, handle_recent, "List files modified within the last N seconds", "<N>"},
+    FlagSpec{"--extensions", false, handle_extensions, "Show file extension statistics", ""},
+    FlagSpec{"--empty-dirs", false, handle_empty_dir, "List empty directories", ""},
+    FlagSpec{"--symlinks", false, handle_symlinks, "List symbolic links", ""},
+    FlagSpec{"--errors", false, handle_errors, "Show filesystem errors encountered", ""},
+    FlagSpec{"--metrics", false, handle_metrics, "Show per-directory depth and size metrics", ""},
+    FlagSpec{"--stats", false, handle_stats, "Show aggregate directory statistics", ""},
+};
 
 export auto parse_positive_size(std::string_view,
                                 std::vector<std::string>& errors,
                                 std::string_view flag_name) -> std::optional<size_t>;
 
 export auto parse(std::span<std::string_view> args) -> ParseResult;
+
+export void print_help(std::ostream& os);

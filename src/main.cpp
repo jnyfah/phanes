@@ -3,32 +3,36 @@ import parser;
 import executor;
 
 #include <iostream>
+#include <span>
 #include <string_view>
-#include <variant>
 #include <vector>
 
 auto main(int argc, char* argv[]) -> int
 {
-    std::vector<std::string_view> input;
-    input.reserve(argc - 1);
+    const std::span args(argv + 1, static_cast<std::size_t>(argc - 1));
 
-    for (int i = 1; i < argc; i++)
+    if (args.empty())
     {
-        input.emplace_back(argv[i]);
+        print_help(std::cout);
+        return 0;
     }
 
-    // we are not printing errors yet why ?? print error cli
-    // what to print is there no option?? summary or error
+    std::vector<std::string_view> input(args.begin(), args.end());
+    const auto result = parse(input);
 
-    const auto& result = parse(input);
-    if (!result.success)
+    if (!result.errors.empty())
     {
         for (const auto& err : result.errors)
         {
-            std::cerr << err << '\n';
+            std::cerr << "warning: " << err << '\n';
+            std::cerr << '\n';
         }
-        // Todo: print help function
-        return 0;
+    }
+
+    if (result.actions.empty())
+    {
+        print_help(std::cout);
+        return result.errors.empty() ? 0 : 1;
     }
 
     const auto tree = build_tree(result.path);

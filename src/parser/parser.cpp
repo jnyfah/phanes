@@ -224,3 +224,27 @@ auto parse(std::span<std::string_view> args) -> ParseResult
     result.success = result.errors.empty();
     return result;
 }
+
+void print_help(std::ostream& os)
+{
+    os << "phanes — filesystem analysis tool\n\n";
+    os << "Usage:\n";
+    os << "  phanes <path> [flags...]\n\n";
+    os << "Flags:\n";
+
+    for (const auto& flag : flag_table)
+    {
+        std::string usage = std::string(flag.name);
+        if (!flag.value_hint.empty())
+        {
+            usage += ' ';
+            usage += flag.value_hint;
+        }
+        os << std::format("  {:<26}  {}\n", usage, flag.description);
+    }
+
+    os << "\nExamples:\n";
+    os << "  phanes /home --summary\n";
+    os << "  phanes /home --largest-files 10 --extensions\n";
+    os << "  phanes /home --recent 86400 --symlinks\n";
+}
