@@ -109,5 +109,4 @@ export auto parse_positive_size(std::string_view,
                                 std::string_view flag_name) -> std::optional<size_t>;
 
 export auto parse(std::span<std::string_view> args) -> ParseResult;
-
 export void print_help(std::ostream& os);

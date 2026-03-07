@@ -17,8 +17,8 @@ export struct SummaryReport
     std::size_t total_symlinks;
     std::size_t total_empty_dir;
     std::size_t total_errors;
-    std::optional<FileNode> largest_file; // add the location in output
-    std::uintmax_t largest_file_size; // add the location in output ??
+    std::optional<FileNode> largest_file;
+    std::uintmax_t largest_file_size;
     std::size_t max_depth;
     std::chrono::seconds total_duration;
     std::string max_depth_dir;
@@ -74,17 +74,3 @@ export DirectoryStats compute_directory_stats(const DirectoryTree& tree, const D
 export DirectoryMetrics compute_directory_metrics(const DirectoryTree& tree);
 
 export const std::vector<ErrorRecord>& get_errors(const DirectoryTree& tree);
-
-// setup readme
-// add comments
-// Duplicate File Detector
-// unit tests
-// - cmake preset blog
-
-// doxgye documentaytion
-
-// fix includes
-// do you need to use namespaces ?
-// fix sonarcube
-// terminal width fix for files that have large names
-// extensions not formated well

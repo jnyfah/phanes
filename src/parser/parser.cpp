@@ -70,6 +70,7 @@ void handle_recent(std::vector<Action>& actions, std::optional<std::string_view>
     auto begin = str->data();
     auto end = begin + str->size();
 
+    // ptr stops where the number ends, anything after is the unit
     if (ptr == end)
     {
         errors.emplace_back("Missing Unit specifier for recently modified (s/m/h/d)");
@@ -192,7 +193,7 @@ auto parse(std::span<std::string_view> args) -> ParseResult
         result.success = result.errors.empty();
         return result;
     }
-    result.path = args[0];
+    result.path = args[0]; // first arg is always the target path
 
     size_t i = 1;
     while (i < args.size())
@@ -209,6 +210,7 @@ auto parse(std::span<std::string_view> args) -> ParseResult
         std::optional<std::string_view> value = std::nullopt;
         if (flag->requires_value)
         {
+            // consume the next token as the flag's value
             if (++i >= args.size())
             {
                 result.errors.emplace_back("Missing value for " + std::string(flag->name));
