@@ -5,6 +5,7 @@ import executor;
 #include <iostream>
 #include <span>
 #include <string_view>
+#include <variant>
 #include <vector>
 
 auto main(int argc, char* argv[]) -> int
