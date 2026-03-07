@@ -1,20 +1,49 @@
 import builder;
-import analysis;
+import parser;
+import executor;
 
 #include <iostream>
+#include <span>
+#include <string_view>
+#include <variant>
+#include <vector>
 
-auto main() -> int
+auto main(int argc, char* argv[]) -> int
 {
-    auto output = build_tree("/home");
-    auto bud = compute_largest_N_Directories(output, 2);
+    const std::span args(argv + 1, static_cast<std::size_t>(argc - 1));
 
-    std::cout << output.directories[bud[0]].path.filename();
-    std::cout << output.directories[bud[1]].path.filename();
+    if (args.empty())
+    {
+        print_help(std::cout);
+        return 0;
+    }
+
+    std::vector<std::string_view> input(args.begin(), args.end());
+    const auto result = parse(input);
+
+    if (!result.errors.empty())
+    {
+        for (const auto& err : result.errors)
+        {
+            std::cerr << "warning: " << err << '\n';
+            std::cerr << '\n';
+        }
+    }
+
+    if (result.actions.empty())
+    {
+        print_help(std::cout);
+        return result.errors.empty() ? 0 : 1;
+    }
+
+    const auto tree = build_tree(result.path);
+
+    const Executor executor{tree, std::cout};
+
+    for (const auto& action : result.actions)
+    {
+        std::visit(executor, action);
+    }
+
+    return 0;
 }
-
-// int main(int argc, char** argv) {
-//     Config cfg = parse_cli(argc, argv);
-//     DirectoryNode tree = build_tree(cfg.root);
-//     run_requested_reports(tree, cfg);
-//     format_and_print_results(...);
-// }
