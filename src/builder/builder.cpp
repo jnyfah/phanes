@@ -11,8 +11,10 @@ DirectoryTree build_tree(const std::filesystem::path& root)
 {
     DirectoryTree tree{};
 
+    // scan start time
     tree.scan_started = std::chrono::floor<std::chrono::seconds>(std::chrono::system_clock::now());
 
+    // scan finished time
     auto finish = [&]()
     {
         tree.scan_finished = std::chrono::floor<std::chrono::seconds>(std::chrono::system_clock::now());
@@ -20,6 +22,7 @@ DirectoryTree build_tree(const std::filesystem::path& root)
     };
 
     std::error_code ec;
+    // get absolute path and normalize
     const auto normalizedRoot = std::filesystem::weakly_canonical(root, ec);
 
     if (ec && ec != std::errc::permission_denied)
@@ -59,6 +62,8 @@ DirectoryTree build_tree(const std::filesystem::path& root)
         auto curID = toprocess.top();
         auto& curDir = tree.directories[curID];
         toprocess.pop();
+
+        // error codes
         std::error_code type_ec, size_ec, time_ec, itr_ec;
 
         for (std::filesystem::directory_iterator it(curDir.path,
@@ -76,7 +81,6 @@ DirectoryTree build_tree(const std::filesystem::path& root)
 
             itr_ec.clear();
             const auto& entry = *it;
-            bool symlink = entry.is_symlink(type_ec);
 
             auto status = entry.symlink_status(type_ec);
             if (type_ec)
@@ -138,7 +142,7 @@ DirectoryTree build_tree(const std::filesystem::path& root)
                 continue;
             }
             default:
-                continue; // sockets, fifo, unknown — skip silently
+                continue; // skip sockets, fifo etc
             }
         }
     }

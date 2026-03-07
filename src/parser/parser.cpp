@@ -134,6 +134,16 @@ void handle_errors(std::vector<Action>& actions, std::optional<std::string_view>
     actions.emplace_back(ErrorsAction{});
 }
 
+void handle_metrics(std::vector<Action>& actions, std::optional<std::string_view> str, std::vector<std::string>& errors)
+{
+    actions.emplace_back(MetricsAction{});
+}
+
+void handle_stats(std::vector<Action>& actions, std::optional<std::string_view> str, std::vector<std::string>& errors)
+{
+    actions.emplace_back(StatsAction{});
+}
+
 std::optional<size_t>
 parse_positive_size(std::string_view str, std::vector<std::string>& errors, std::string_view flag_name)
 {

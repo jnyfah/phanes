@@ -41,6 +41,14 @@ export struct RecentAction
     std::chrono::seconds duration;
 };
 
+export struct MetricsAction
+{
+};
+
+export struct StatsAction
+{
+};
+
 using Action = std::variant<SummaryAction,
                             ExtensionsAction,
                             EmptyDirsAction,
@@ -48,7 +56,9 @@ using Action = std::variant<SummaryAction,
                             ErrorsAction,
                             LargestFilesAction,
                             LargestDirsAction,
-                            RecentAction>;
+                            RecentAction,
+                            MetricsAction,
+                            StatsAction>;
 
 struct ParseResult
 {
@@ -75,8 +85,10 @@ export void handle_extensions(std::vector<Action>&, std::optional<std::string_vi
 export void handle_empty_dir(std::vector<Action>&, std::optional<std::string_view>, std::vector<std::string>&);
 export void handle_symlinks(std::vector<Action>&, std::optional<std::string_view>, std::vector<std::string>&);
 export void handle_errors(std::vector<Action>&, std::optional<std::string_view>, std::vector<std::string>&);
+export void handle_metrics(std::vector<Action>&, std::optional<std::string_view>, std::vector<std::string>&);
+export void handle_stats(std::vector<Action>&, std::optional<std::string_view>, std::vector<std::string>&);
 
-constexpr size_t N = 8;
+constexpr size_t N = 10;
 constexpr std::array<FlagSpec, N> flag_table{FlagSpec{"--summary", false, handle_summary},
                                              FlagSpec{"--largest-files", true, handle_largest_files},
                                              FlagSpec{"--largest-dirs", true, handle_largest_dir},
@@ -84,7 +96,9 @@ constexpr std::array<FlagSpec, N> flag_table{FlagSpec{"--summary", false, handle
                                              FlagSpec{"--extensions", false, handle_extensions},
                                              FlagSpec{"--empty-dirs", false, handle_empty_dir},
                                              FlagSpec{"--symlinks", false, handle_symlinks},
-                                             FlagSpec{"--errors", false, handle_errors}};
+                                             FlagSpec{"--errors", false, handle_errors},
+                                             FlagSpec{"--metrics", false, handle_metrics},
+                                             FlagSpec{"--stats", false, handle_stats}};
 
 export auto parse_positive_size(std::string_view,
                                 std::vector<std::string>& errors,

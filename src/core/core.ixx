@@ -54,7 +54,7 @@ export struct ErrorRecord
     NodeKind node_kind;
 };
 
-/* ---------- Scan result / tree ---------- */
+/* ---------- Scan tree ---------- */
 
 export struct DirectoryTree
 {

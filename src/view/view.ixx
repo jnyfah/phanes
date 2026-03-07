@@ -25,7 +25,5 @@ export void print_recent_files(std::ostream& os,
 export void print_extension_stats(std::ostream& os, const std::vector<ExtensionStats>& stats);
 export void print_errors(std::ostream& os, const std::vector<ErrorRecord>& errors);
 
-// Todo
-export void print_directory_stats(std::ostream& os, const DirectoryStats& stats);
-export void print_directory_depths(std::ostream& os, const std::vector<std::size_t>& size);
-export void print_directory_metrics(std::ostream& os, const DirectoryMetrics& metrics);
+export void print_directory_stats(std::ostream& os, const DirectoryStats& stats, const DirectoryTree& tree);
+export void print_directory_metrics(std::ostream& os, const DirectoryMetrics& metrics, const DirectoryTree& tree);

@@ -117,6 +117,7 @@ void print_summary(std::ostream& os, const SummaryReport& report)
     }
 
     os << std::format("{:<18}: {}\n", "Max Depth", report.max_depth);
+    os << std::format("{:<18}: {}\n", "Max Depth dir", report.max_depth_dir);
 
     os << std::format("{:<18}: {}\n", "Scan Duration", format_duration(report.total_duration));
 }
@@ -303,4 +304,47 @@ void print_errors(std::ostream& os, const std::vector<ErrorRecord>& errors)
                           node_to_string(err.node_kind),
                           err.path.string());
     }
+}
+
+void print_directory_stats(std::ostream& os, const DirectoryStats& stats, const DirectoryTree& tree)
+{
+    os << "Directory Statistics\n";
+    os << "────────────────────────────────────────────────────────\n\n";
+
+    os << std::format("{:<35} {}\n", "Max Depth", stats.max_depth);
+    os << std::format("{:<35} {}\n", "Deepest Directory", tree.directories[stats.max_depth_dir].path.string());
+
+    os << std::format("{:<35} {}\n", "Most Files (recursive)", stats.max_files_count);
+    os << std::format("{:<35} {}\n",
+                      "Directory with Most Files",
+                      tree.directories[stats.max_files_count_dir].path.string());
+
+    os << std::format("{:<35} {}\n", "Largest Directory (recursive)", format_size(stats.max_files_size));
+    os << std::format("{:<35} {}\n",
+                      "Largest Directory Path",
+                      tree.directories[stats.max_files_size_dir].path.string());
+
+    os << std::format("{:<35} {:.2f}\n", "Average Directory Depth", stats.average_directory_depth);
+    os << std::format("{:<35} {:.2f}\n", "Average Files per Directory", stats.average_files_per_directory);
+
+    os << '\n';
+}
+
+void print_directory_metrics(std::ostream& os, const DirectoryMetrics& metrics, const DirectoryTree& tree)
+{
+    os << std::format("Directory Metrics ({} directories)\n", tree.directories.size());
+    os << "────────────────────────────────────────────────────────\n\n";
+    os << std::format("{:<40} {:>8} {:>14} {:>10}\n", "Directory", "Depth", "Size", "Files");
+    os << std::format("{:-<40} {:-<8} {:-<14} {:-<10}\n", "", "", "", "");
+
+    for (DirectoryId id = 0; id < tree.directories.size(); ++id)
+    {
+        const auto& dir = tree.directories[id];
+        os << std::format("{:<40} {:>8} {:>14} {:>10}\n",
+                          dir.path.filename().string(),
+                          metrics.depth[id],
+                          format_size(metrics.recursive_size[id]),
+                          metrics.recursive_file_count[id]);
+    }
+    os << '\n';
 }
