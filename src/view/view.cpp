@@ -94,7 +94,7 @@ std::string format_duration(std::chrono::seconds total)
 void print_summary(std::ostream& os, const SummaryReport& report)
 {
     os << "Scan Summary\n";
-    os << "────────────\n\n";
+    os << "------------------\n\n";
 
     os << std::format("{:<18}: {}\n", "Directories", report.total_directories);
     os << std::format("{:<18}: {}\n", "Files", report.total_files);
@@ -127,7 +127,7 @@ void print_summary(std::ostream& os, const SummaryReport& report)
 void print_largest_files(std::ostream& os, const std::vector<FileId>& files, const DirectoryTree& tree)
 {
     os << std::format("Largest {} Files\n", files.size());
-    os << "──────────────────────────────\n\n";
+    os << "------------------------------------\n\n";
 
     os << std::format("{:<40} {:>12}  {}\n", "Filename", "Size", "Location");
     os << std::format("{:-<40} {:-<12}  {:-<20}\n", "", "", "");
@@ -148,7 +148,7 @@ void print_largest_files(std::ostream& os, const std::vector<FileId>& files, con
 void print_largest_directories(std::ostream& os, const std::vector<DirectoryId>& directories, const DirectoryTree& tree)
 {
     os << std::format("Largest {} Directories\n", directories.size());
-    os << "──────────────────────────────────────────────\n\n";
+    os << "--------------------------------------------\n\n";
 
     os << std::format("{:<40} {:>12} {:>12}  {}\n", "Directory", "Files", "Subdirs", "Location");
 
@@ -171,7 +171,7 @@ void print_largest_directories(std::ostream& os, const std::vector<DirectoryId>&
 void print_empty_directories(std::ostream& os, const std::vector<DirectoryId>& directories, const DirectoryTree& tree)
 {
     os << "Empty Directories\n";
-    os << "────────────────────────────────────\n\n";
+    os << "--------------------------------------\n\n";
 
     os << std::format("{:<40}  {}\n", "Directory", "Location");
 
@@ -190,7 +190,7 @@ void print_empty_directories(std::ostream& os, const std::vector<DirectoryId>& d
 void print_symlinks(std::ostream& os, const std::vector<FileId>& files, const DirectoryTree& tree)
 {
     os << "Symlinks \n";
-    os << "────────────────────────────────────\n\n";
+    os << "--------------------------------------\n\n";
 
     os << std::format("{:<40} {:>12}  {}\n", "Filename", "Size", "Location");
     os << std::format("{:-<40} {:-<12}  {:-<20}\n", "", "", "");
@@ -217,7 +217,7 @@ void print_recent_files(std::ostream& os,
     auto now = std::chrono::floor<std::chrono::seconds>(std::chrono::system_clock::now());
 
     os << std::format("Files modified within the last {}\n", time);
-    os << "────────────────────────────────────────────────────────────\n\n";
+    os << "--------------------------------------------\n\n";
 
     os << std::format("{:<35} {:>12} {:<20} {:>12}\n", "Filename", "Size", "Location", "Modified");
 
@@ -240,7 +240,7 @@ void print_recent_files(std::ostream& os,
 void print_extension_stats(std::ostream& os, const std::vector<ExtensionStats>& stats)
 {
     os << std::format("File Extension Statistics ({} types)\n", stats.size());
-    os << "────────────────────────────────────────────────────────\n\n";
+    os << "--------------------------------------------\n\n";
 
     os << std::format("{:<20} {:>12} {:>14}\n", "Extension", "Count", "Total Size");
 
@@ -294,7 +294,7 @@ void print_errors(std::ostream& os, const std::vector<ErrorRecord>& errors)
     };
 
     os << "Errors\n";
-    os << "──────\n\n";
+    os << "--------------------------------------\n\n";
 
     os << std::format("{:<18} {:<12} {}\n", "Type", "Node", "Path");
     os << std::format("{:-<18} {:-<12} {:-<1}\n", "", "", "");
@@ -311,7 +311,7 @@ void print_errors(std::ostream& os, const std::vector<ErrorRecord>& errors)
 void print_directory_stats(std::ostream& os, const DirectoryStats& stats, const DirectoryTree& tree)
 {
     os << "Directory Statistics\n";
-    os << "────────────────────────────────────────────────────────\n\n";
+    os << "--------------------------------------------\n\n";
 
     os << std::format("{:<35} {}\n", "Max Depth", stats.max_depth);
     os << std::format("{:<35} {}\n", "Deepest Directory", tree.directories[stats.max_depth_dir].path.string());
@@ -335,7 +335,7 @@ void print_directory_stats(std::ostream& os, const DirectoryStats& stats, const 
 void print_directory_metrics(std::ostream& os, const DirectoryMetrics& metrics, const DirectoryTree& tree)
 {
     os << std::format("Directory Metrics ({} directories)\n", tree.directories.size());
-    os << "────────────────────────────────────────────────────────\n\n";
+    os << "--------------------------------------------------\n\n";
     os << std::format("{:<40} {:>8} {:>14} {:>10}\n", "Directory", "Depth", "Size", "Files");
     os << std::format("{:-<40} {:-<8} {:-<14} {:-<10}\n", "", "", "", "");
 
