@@ -7,6 +7,8 @@ module;
 
 module builder;
 
+import :scheduler;
+
 DirectoryTree build_tree(const std::filesystem::path& root)
 {
     DirectoryTree tree{};
