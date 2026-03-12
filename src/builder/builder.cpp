@@ -1,10 +1,10 @@
 module;
-
 #include <chrono>
+#include <condition_variable>
 #include <filesystem>
-#include <stack>
+#include <functional>
+#include <mutex>
 #include <system_error>
-
 module builder;
 
 import :scheduler;
@@ -45,6 +45,8 @@ DirectoryTree build_tree(const std::filesystem::path& root)
         return finish();
     }
 
+    ThreadPool pool(8);
+
     DirectoryId next_dir_id = 0;
     FileId next_file_id = 0;
 
@@ -56,19 +58,24 @@ DirectoryTree build_tree(const std::filesystem::path& root)
     tree.directories.push_back(node);
     tree.root = node.id;
 
-    std::stack<DirectoryId> toprocess;
-    toprocess.push(node.id);
+    std::mutex guard;
+    std::condition_variable done_cv;
+    int active_tasks = 0;
 
-    while (!toprocess.empty())
+    std::function<void(DirectoryId)> scan_directory;
+
+    scan_directory = [&](DirectoryId id)
     {
-        auto curID = toprocess.top();
-        auto& curDir = tree.directories[curID];
-        toprocess.pop();
+        const std::filesystem::path dirPath = [&]
+        {
+            std::lock_guard lock(guard);
+            return tree.directories[id].path;
+        }();
 
         // error codes
         std::error_code type_ec, size_ec, time_ec, itr_ec;
 
-        for (std::filesystem::directory_iterator it(curDir.path,
+        for (std::filesystem::directory_iterator it(dirPath,
                                                     std::filesystem::directory_options::skip_permission_denied,
                                                     itr_ec);
              it != std::filesystem::directory_iterator();
@@ -77,7 +84,8 @@ DirectoryTree build_tree(const std::filesystem::path& root)
 
             if (itr_ec && itr_ec != std::errc::permission_denied)
             {
-                tree.errors.push_back({curDir.path, ErrorKind::NotFound, NodeKind::Directory});
+                std::lock_guard lock(guard);
+                tree.errors.push_back({dirPath, ErrorKind::NotFound, NodeKind::Directory});
                 continue;
             }
 
@@ -87,6 +95,7 @@ DirectoryTree build_tree(const std::filesystem::path& root)
             auto status = entry.symlink_status(type_ec);
             if (type_ec)
             {
+                std::lock_guard lock(guard);
                 tree.errors.push_back({entry.path(), ErrorKind::FileError, NodeKind::File});
                 continue;
             }
@@ -95,35 +104,36 @@ DirectoryTree build_tree(const std::filesystem::path& root)
             {
             case std::filesystem::file_type::directory:
             {
-                DirectoryId dirId = next_dir_id++;
-                DirectoryNode directory{};
-                directory.id = dirId;
-                directory.parent = curID;
-                directory.path = entry.path();
-                tree.directories.push_back(directory);
-                tree.directories[curID].subdirs.push_back(dirId);
-                toprocess.push({dirId});
+                DirectoryId dirId;
+                {
+                    std::lock_guard lock(guard);
+                    dirId = next_dir_id++;
+                    DirectoryNode directory{};
+                    directory.id = dirId;
+                    directory.parent = id;
+                    directory.path = entry.path();
+                    tree.directories.push_back(directory);
+                    tree.directories[id].subdirs.push_back(dirId);
+                    ++active_tasks;
+                }
+                pool.submit([&, dirId] { scan_directory(dirId); });
                 break;
             }
             case std::filesystem::file_type::regular:
             case std::filesystem::file_type::symlink:
             {
-                const bool symlink = status.type() == std::filesystem::file_type::symlink;
-                FileId fileId = next_file_id++;
-                FileNode file{};
-                file.id = fileId;
-                file.parent = curID;
-                file.path = entry.path();
-                file.is_symlink = symlink;
-                tree.directories[curID].files.push_back(fileId);
+                const bool is_symlink = status.type() == std::filesystem::file_type::symlink;
 
-                if (!symlink)
+                FileNode file{};
+                file.parent = id;
+                file.path = entry.path();
+                file.is_symlink = is_symlink;
+
+                if (!is_symlink)
                 {
                     auto size = entry.file_size(size_ec);
                     if (!size_ec)
                         file.size = size;
-                    else if (size_ec != std::errc::permission_denied && size_ec != std::errc::no_such_file_or_directory)
-                        tree.errors.push_back({entry.path(), ErrorKind::FileError, NodeKind::File});
                 }
 
                 auto ftime = entry.last_write_time(time_ec);
@@ -132,14 +142,29 @@ DirectoryTree build_tree(const std::filesystem::path& root)
                     auto sysTime = std::chrono::clock_cast<std::chrono::system_clock>(ftime);
                     file.modified = std::chrono::floor<std::chrono::seconds>(sysTime);
                 }
-                else if (time_ec != std::errc::permission_denied && time_ec != std::errc::no_such_file_or_directory)
-                    tree.errors.push_back({entry.path(), ErrorKind::FileError, NodeKind::File});
 
-                tree.files.push_back(file);
+                {
+                    std::lock_guard lock(guard); // single lock acquisition
+                    file.id = next_file_id++;
+                    tree.files.push_back(file);
+                    tree.directories[id].files.push_back(file.id);
+
+                    if (!is_symlink && size_ec && size_ec != std::errc::permission_denied &&
+                        size_ec != std::errc::no_such_file_or_directory)
+                    {
+                        tree.errors.push_back({entry.path(), ErrorKind::FileError, NodeKind::File});
+                    }
+                    if (time_ec && time_ec != std::errc::permission_denied &&
+                        time_ec != std::errc::no_such_file_or_directory)
+                    {
+                        tree.errors.push_back({entry.path(), ErrorKind::FileError, NodeKind::File});
+                    }
+                }
                 break;
             }
             case std::filesystem::file_type::unknown:
             {
+                std::lock_guard lock(guard);
                 tree.errors.push_back({entry.path(), ErrorKind::Unknown, NodeKind::File});
                 continue;
             }
@@ -147,6 +172,22 @@ DirectoryTree build_tree(const std::filesystem::path& root)
                 continue; // skip sockets, fifo etc
             }
         }
+        {
+            std::lock_guard lock(guard);
+            if (--active_tasks == 0)
+                done_cv.notify_one();
+        }
+    };
+
+    {
+        std::lock_guard lock(guard);
+        ++active_tasks;
+    }
+    pool.submit([&] { scan_directory(tree.root.value()); });
+
+    {
+        std::unique_lock lock(guard);
+        done_cv.wait(lock, [&] { return active_tasks == 0; });
     }
 
     return finish();

@@ -5,6 +5,7 @@ module;
 #include <functional>
 #include <mutex>
 #include <queue>
+#include <stdexcept>
 #include <thread>
 #include <vector>
 
@@ -41,7 +42,7 @@ class ThreadPool
     }
 
   public:
-    ThreadPool(size_t threads = 8)
+    explicit ThreadPool(size_t threads = 8)
     {
         workers.reserve(threads);
         for (size_t i = 0; i < threads; i++)
