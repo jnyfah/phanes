@@ -103,7 +103,7 @@ class ThreadPool
         }
         else
         {
-            auto& worker = workers[current_worker_id];
+            const auto& worker = workers[current_worker_id];
             {
                 std::lock_guard lock(worker->guard);
                 if (!is_active)
@@ -124,11 +124,11 @@ class ThreadPool
         }
         condition.notify_all();
 
-        for (auto& w : workers)
+        for (const auto& worker : workers)
         {
-            if (w->thread.joinable())
+            if (worker->thread.joinable())
             {
-                w->thread.join();
+                worker->thread.join();
             }
         }
     }
