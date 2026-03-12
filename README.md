@@ -1,7 +1,7 @@
 # phanes
 
 [![CMake Build](https://github.com/jnyfah/phanes/actions/workflows/build.yml/badge.svg)](https://github.com/jnyfah/phanes/actions/workflows/build.yml)
-[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=jnyfah_phanes&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=jnyfah_phanes)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=jnyfah_phanes&metric=alert_status&token=70f44ef44415031cc2a1d2e532ec7a1d88553720)](https://sonarcloud.io/summary/new_code?id=jnyfah_phanes)
 
 A tiny CLI filesystem analyzer — and a hands-on playground for learning modern C++23 features.
 
