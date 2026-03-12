@@ -7,6 +7,7 @@ target_sources(phanes_core
     FILES
       core/core.ixx
       builder/builder.ixx
+      builder/scheduler.cpp 
       analyzer/analyzer.ixx
       parser/parser.ixx
       view/view.ixx
