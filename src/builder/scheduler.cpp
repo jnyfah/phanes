@@ -7,35 +7,70 @@ module;
 #include <queue>
 #include <stdexcept>
 #include <thread>
+#include <utility>
 #include <vector>
 
 module builder:scheduler;
 
+struct Worker
+{
+    Worker() = default;
+    Worker(Worker&&) = delete;
+    auto operator=(Worker&&) -> Worker& = delete;
+    Worker(const Worker&) = delete;
+    auto operator=(const Worker&) -> Worker& = delete;
+
+    std::thread thread;
+    std::mutex guard;
+    std::queue<std::function<void()>> tasks;
+};
+
+static thread_local size_t current_worker_id = -1;
+
 class ThreadPool
 {
   private:
-    std::vector<std::thread> workers;
+    std::vector<std::unique_ptr<Worker>> workers;
     std::condition_variable condition;
     std::mutex guard;
     bool is_active{true};
     std::queue<std::function<void()>> tasks;
 
-    void worker_loop()
+    void worker_loop(size_t id)
     {
+        current_worker_id = id;
         while (true)
         {
             std::function<void()> task;
+            {
 
+                auto& worker = *workers[id];
+                std::unique_lock lock(worker.guard);
+
+                if (!worker.tasks.empty())
+                {
+                    task = std::move(worker.tasks.front());
+                    worker.tasks.pop();
+                }
+            }
+
+            if (!task)
             {
                 std::unique_lock lock(guard);
-
-                condition.wait(lock, [this] { return !is_active || !tasks.empty(); });
-                if (!is_active && tasks.empty())
+                if (!tasks.empty())
+                {
+                    task = std::move(tasks.front());
+                    tasks.pop();
+                }
+                else if (!is_active)
                 {
                     return;
                 }
-                task = std::move(tasks.front());
-                tasks.pop();
+                else
+                {
+                    condition.wait(lock, [this] { return !is_active || !tasks.empty(); });
+                    continue;
+                }
             }
             task();
         }
@@ -45,37 +80,56 @@ class ThreadPool
     explicit ThreadPool(size_t threads = 8)
     {
         workers.reserve(threads);
-        for (size_t i = 0; i < threads; i++)
+        for (size_t i = 0; i < threads; ++i)
         {
-            workers.emplace_back(&ThreadPool::worker_loop, this);
+            auto& w = workers.emplace_back(std::make_unique<Worker>());
+            w->thread = std::thread(&ThreadPool::worker_loop, this, i);
         }
     }
 
     void submit(std::function<void()> task)
     {
+        if (current_worker_id == -1)
         {
-            std::lock_guard lock(guard);
-            if (!is_active)
             {
-                throw std::runtime_error("ThreadPool stopped");
+                std::lock_guard lock(guard);
+                if (!is_active)
+                {
+                    throw std::runtime_error("ThreadPool stopped");
+                }
+                tasks.push(std::move(task));
             }
-            tasks.push(std::move(task));
+            condition.notify_one();
         }
-        condition.notify_one();
+        else
+        {
+            auto& worker = workers[current_worker_id];
+            {
+                std::lock_guard lock(worker->guard);
+                if (!is_active)
+                {
+                    throw std::runtime_error("ThreadPool stopped");
+                }
+                worker->tasks.push(std::move(task));
+            }
+        }
     }
 
     ~ThreadPool()
     {
 
         {
-            std::lock_guard lock(guard);
+            std::unique_lock lock(guard);
             is_active = false;
         }
         condition.notify_all();
 
-        for (auto& worker : workers)
+        for (auto& w : workers)
         {
-            worker.join();
+            if (w->thread.joinable())
+            {
+                w->thread.join();
+            }
         }
     }
 
