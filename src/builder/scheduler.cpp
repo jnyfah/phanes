@@ -32,7 +32,7 @@ struct Worker
 
 static constexpr size_t NO_WORKER_ID = std::numeric_limits<size_t>::max();
 static thread_local size_t current_worker_id = NO_WORKER_ID;
-static thread_local std::mt19937 rng{std::random_device{}()};
+static thread_local std::mt19937 rng{std::hash<std::thread::id>{}(std::this_thread::get_id())};
 
 class ThreadPool
 {
@@ -176,7 +176,7 @@ class ThreadPool
         workers.reserve(threads);
         for (size_t i = 0; i < threads; ++i)
         {
-            auto& w = workers.emplace_back(std::make_unique<Worker>());
+            const auto& w = workers.emplace_back(std::make_unique<Worker>());
             w->thread = std::thread(&ThreadPool::worker_loop, this, i);
         }
     }
