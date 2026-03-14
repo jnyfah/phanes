@@ -1,10 +1,17 @@
 
 module;
+
+#include <algorithm>
+#include <atomic>
 #include <condition_variable>
 #include <cstddef>
+#include <deque>
 #include <functional>
+#include <iterator>
 #include <mutex>
 #include <queue>
+#include <random>
+#include <ranges>
 #include <stdexcept>
 #include <thread>
 #include <utility>
@@ -22,10 +29,12 @@ struct Worker
 
     std::thread thread;
     std::mutex guard;
-    std::queue<std::function<void()>> tasks;
+    std::deque<std::function<void()>> tasks;
 };
 
-static thread_local size_t current_worker_id = -1;
+static constexpr size_t NO_WORKER_ID = std::numeric_limits<size_t>::max();
+static thread_local size_t current_worker_id = NO_WORKER_ID;
+static thread_local std::mt19937 rng{std::random_device{}()};
 
 class ThreadPool
 {
@@ -35,42 +44,122 @@ class ThreadPool
     std::mutex guard;
     bool is_active{true};
     std::queue<std::function<void()>> tasks;
+    std::atomic<size_t> idle_count{0};
+
+    auto try_steal(size_t id) -> std::function<void()>
+    {
+
+        std::vector<size_t> order;
+        order.reserve(workers.size() - 1);
+
+        auto indices = std::views::iota(size_t(0), workers.size());
+
+        std::ranges::copy_if(indices, std::back_inserter(order), [id](size_t i) { return i != id; });
+
+        std::ranges::shuffle(order, rng);
+
+        for (size_t victim_id : order)
+        {
+
+            auto& victim = *workers[victim_id];
+
+            std::unique_lock lock(victim.guard, std::try_to_lock);
+
+            if (!lock || victim.tasks.empty())
+            {
+                continue;
+            }
+
+            const auto steal_count = std::max(size_t{1}, victim.tasks.size() / 2);
+            std::vector<std::function<void()>> stolen;
+            stolen.reserve(steal_count);
+
+            for (size_t i = 0; i < steal_count; i++)
+            {
+                stolen.emplace_back(std::move(victim.tasks.back()));
+                victim.tasks.pop_back();
+            }
+
+            lock.unlock();
+
+            std::function<void()> task = stolen[0];
+
+            if (stolen.size() > 1)
+            {
+                auto& w = *workers[id];
+                std::lock_guard lock(w.guard);
+                for (size_t i = 1; i < stolen.size(); i++)
+                {
+                    w.tasks.push_front(std::move(stolen[i]));
+                }
+            }
+            return task;
+        }
+        return {};
+    }
 
     void worker_loop(size_t id)
     {
         current_worker_id = id;
+        constexpr size_t STEAL_ATTEMPTS = 64;
+
         while (true)
         {
             std::function<void()> task;
+
+            // Try local
             {
+                auto& w = *workers[id];
+                std::lock_guard lock(w.guard);
 
-                auto& worker = *workers[id];
-                std::unique_lock lock(worker.guard);
-
-                if (!worker.tasks.empty())
+                if (!w.tasks.empty())
                 {
-                    task = std::move(worker.tasks.front());
-                    worker.tasks.pop();
+                    task = std::move(w.tasks.front());
+                    w.tasks.pop_front();
                 }
             }
 
+            // try global
             if (!task)
             {
-                std::unique_lock lock(guard);
+                std::lock_guard lock(guard);
+
                 if (!tasks.empty())
                 {
                     task = std::move(tasks.front());
                     tasks.pop();
                 }
-                else if (!is_active)
+            }
+
+            // try steal
+            if (!task)
+            {
+                for (size_t attempt = 0; !task && attempt < STEAL_ATTEMPTS; ++attempt)
                 {
-                    return;
+                    task = try_steal(id);
+                    if (!task)
+                    {
+                        std::this_thread::yield();
+                    }
                 }
-                else
+            }
+
+            // shutdown
+            if (!task)
+            {
+                ++idle_count;
                 {
+                    std::unique_lock lock(guard);
+
+                    if (!is_active)
+                    {
+                        --idle_count;
+                        return;
+                    }
                     condition.wait(lock, [this] { return !is_active || !tasks.empty(); });
-                    continue;
                 }
+                --idle_count;
+                continue;
             }
             task();
         }
@@ -89,7 +178,7 @@ class ThreadPool
 
     void submit(std::function<void()> task)
     {
-        if (current_worker_id == -1)
+        if (current_worker_id == NO_WORKER_ID)
         {
             {
                 std::lock_guard lock(guard);
@@ -103,14 +192,23 @@ class ThreadPool
         }
         else
         {
-            const auto& worker = workers[current_worker_id];
+            auto& worker = *workers[current_worker_id];
+            size_t local_size = 0;
             {
-                std::lock_guard lock(worker->guard);
+                std::lock_guard lock(worker.guard);
                 if (!is_active)
                 {
                     throw std::runtime_error("ThreadPool stopped");
                 }
-                worker->tasks.push(std::move(task));
+                worker.tasks.emplace_back(std::move(task));
+                local_size = worker.tasks.size();
+            }
+
+            // if this local queue we just added a task to has more than 2 tasks and we also have idle threads wake up
+            // the idle thread
+            if (local_size > 1 && idle_count.load(std::memory_order_relaxed) > 0)
+            {
+                condition.notify_one();
             }
         }
     }
@@ -138,3 +236,7 @@ class ThreadPool
     ThreadPool(ThreadPool&&) = delete;
     auto operator=(ThreadPool&&) -> ThreadPool& = delete;
 };
+
+// try stealing multiple times before sleeping
+// Better wake policy:
+// Steal batches.
