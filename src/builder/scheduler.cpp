@@ -45,6 +45,7 @@ class ThreadPool
 
     std::atomic<bool> is_active{true};
     std::atomic<size_t> idle_workers{0};
+    std::atomic<size_t> pending_tasks{0};
 
     auto try_steal(size_t self) -> std::function<void()>
     {
@@ -160,13 +161,18 @@ class ThreadPool
                     return;
                 }
 
-                condition.wait(lock);
+                condition.wait(lock,
+                               [&] {
+                                   return !is_active.load(std::memory_order_relaxed) ||
+                                       pending_tasks.load(std::memory_order_relaxed) > 0;
+                               });
 
                 idle_workers.fetch_sub(1, std::memory_order_relaxed);
                 continue;
             }
             // EXECUTE
             task();
+            pending_tasks.fetch_sub(1, std::memory_order_relaxed);
         }
     }
 
@@ -183,6 +189,7 @@ class ThreadPool
 
     void submit(std::function<void()> task)
     {
+        pending_tasks.fetch_add(1, std::memory_order_relaxed);
         if (current_worker_id == NO_WORKER_ID)
         {
             // add to global queue
