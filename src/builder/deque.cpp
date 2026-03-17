@@ -56,6 +56,7 @@ class LockFreeDeque
     [[nodiscard]] auto Size() const -> std::size_t { return size; }
 
   private:
+    // NOLINTNEXTLINE(cppcoreguidelines-avoid-c-arrays)
     std::unique_ptr<T[]> data;
     std::size_t capacity{16};
     std::size_t front{0};
