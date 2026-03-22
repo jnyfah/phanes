@@ -1,6 +1,7 @@
 module;
 
 #include <atomic>
+#include <cassert>
 #include <cstddef>
 #include <memory>
 #include <optional>
@@ -12,26 +13,29 @@ template <typename T>
 class LockFreeDeque
 {
   public:
-    LockFreeDeque() : data(std::make_unique<T[]>(capacity)) {}
-
-    auto push_back(T&& item) -> void
+    LockFreeDeque() : data(std::make_unique<T[]>(capacity))
     {
-        auto f = front.load(std::memory_order_relaxed);
-        auto b = back.load(std::memory_order_acquire);
+        assert((capacity & (capacity - 1)) == 0 && "capacity must be power of two");
+    }
+
+    auto push_back(T item) -> bool
+    {
+        const auto b = back.load(std::memory_order_relaxed);
+        const auto f = front.load(std::memory_order_acquire);
 
         if (b - f >= capacity)
         {
-            return; // todo
+            return false;
         }
 
         data[b & mask] = std::move(item);
-        std::atomic_thread_fence(std::memory_order_release);
-        back.store(b + 1, std::memory_order_relaxed);
+        back.store(b + 1, std::memory_order_release);
+        return true;
     }
 
     auto pop_back() -> std::optional<T>
     {
-        auto b = back.load(std::memory_order_acquire);
+        auto b = back.load(std::memory_order_relaxed);
 
         if (b == 0)
         {
@@ -50,8 +54,6 @@ class LockFreeDeque
             return std::nullopt;
         }
 
-        T item = std::move(data[b & mask]);
-
         // if there is one item left, CAS to see who wins the race to pick the last item
         if (f == b)
         {
@@ -65,30 +67,27 @@ class LockFreeDeque
 
             // if yes then update back
             back.store(f + 1, std::memory_order_relaxed);
+            return std::move(data[b & mask]);
         }
-        return item;
+        return std::move(data[b & mask]);
     }
 
-    auto pop_front() -> std::optional<T>
+    auto steal_front() -> std::optional<T>
     {
-        auto f = front.load(std::memory_order_relaxed);
-        std::atomic_thread_fence(std::memory_order_seq_cst);
-
-        auto b = back.load(std::memory_order_relaxed);
+        auto f = front.load(std::memory_order_acquire);
+        auto b = back.load(std::memory_order_acquire);
 
         if (f >= b)
         {
             return std::nullopt;
         }
 
-        T item = std::move(data[f & mask]);
-
-        if (!front.compare_exchange_strong(f, f + 1, std::memory_order_seq_cst, std::memory_order_relaxed))
+        if (!front.compare_exchange_strong(f, f + 1, std::memory_order_acq_rel, std::memory_order_relaxed))
         {
             return std::nullopt;
         }
 
-        return item;
+        return std::move(data[f & mask]);
     }
 
     [[nodiscard]] auto empty() const -> bool
