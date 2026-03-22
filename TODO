@@ -3,6 +3,8 @@
 - Duplicate File Detector
 - unit tests
 - cmake preset blog
+- alignas blog
+
 
 - doxgyen documentaytion
 
@@ -11,6 +13,8 @@
 - extensions not formated well
 
 -parallel_build_tree using a work-stealing scheduler.
+
+- fix struct alignment
 
 parallel filesystem analysis engine
 
@@ -39,3 +43,6 @@ view
 
 
 * introduce jthread
+
+
+
