@@ -45,4 +45,8 @@ view
 * introduce jthread
 
 
+Acquire locally: later operations cannot move before the load.
+Acquire across threads: if the load sees a value stored with release, then prior writes from that thread become visible too.
+
+
 
