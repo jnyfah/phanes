@@ -107,9 +107,9 @@ class LockFreeDeque
     }
 
   private:
+    static constexpr std::size_t capacity{64};
+    static constexpr std::size_t mask{capacity - 1};
     std::unique_ptr<T[]> data;
     alignas(64) std::atomic_size_t front{0};
     alignas(64) std::atomic_size_t back{0};
-    const std::size_t capacity{16};
-    const std::size_t mask = capacity - 1;
 };

@@ -45,8 +45,6 @@ DirectoryTree build_tree(const std::filesystem::path& root)
         return finish();
     }
 
-    ThreadPool pool(8);
-
     DirectoryId next_dir_id = 0;
     FileId next_file_id = 0;
 
@@ -63,6 +61,8 @@ DirectoryTree build_tree(const std::filesystem::path& root)
     int active_tasks = 0;
 
     std::function<void(DirectoryId)> scan_directory;
+
+    ThreadPool pool(8, [&](DirectoryId id) { scan_directory(id); });
 
     scan_directory = [&](DirectoryId id)
     {
@@ -116,7 +116,7 @@ DirectoryTree build_tree(const std::filesystem::path& root)
                     tree.directories[id].subdirs.push_back(dirId);
                     ++active_tasks;
                 }
-                pool.submit([&, dirId] { scan_directory(dirId); });
+                pool.submit(dirId);
                 break;
             }
             case std::filesystem::file_type::regular:
@@ -183,7 +183,7 @@ DirectoryTree build_tree(const std::filesystem::path& root)
         std::lock_guard lock(guard);
         ++active_tasks;
     }
-    pool.submit([&] { scan_directory(tree.root.value()); });
+    pool.submit(tree.root.value());
 
     {
         std::unique_lock lock(guard);
