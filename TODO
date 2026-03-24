@@ -44,9 +44,33 @@ view
 
 * introduce jthread
 
+false sharing
+
 
 Acquire locally: later operations cannot move before the load.
 Acquire across threads: if the load sees a value stored with release, then prior writes from that thread become visible too.
 
 
 
+
+1. The biggest bottleneck: worker.guard on the hot path
+
+Every local dequeue hits std::lock_guard lock(w.guard) on line 137. Your deque is already lock-free — you're putting a mutex in front of it. The guard exists to protect the steal, but the owner (pop_back) and a thief (steal_front) access opposite ends. You can remove the mutex from the owner's local dequeue entirely — only the steal path needs synchronization with the victim.
+
+2. Random victim selection repeats
+
+dist(rng) on line 69 can pick the same victim multiple times across N attempts. Replace it with a shuffled index array (or just iterate linearly starting from self+1) so you try each worker exactly once.
+
+3. False sharing on Worker
+
+worker.guard and worker.tasks share a cache line with the thread handle. The deque already aligns front/back to 64 bytes internally, but the Worker struct itself isn't aligned. Add alignas(64) to Worker or at minimum to the tasks member.
+
+4. global_guard contention on sleep/wake
+
+The condition variable uses global_guard which is also used by submit. Under load, workers going to sleep contend with submitters. A separate mutex for the condition variable (not shared with the queue) would reduce that.
+
+5. pending_tasks wake condition is coarse
+
+A worker wakes if pending_tasks > 0 but the task may already be claimed by the time it checks. You could track a submitted_since_last_steal counter to make the wakeup more precise, but this is minor.
+
+The biggest win by far is #1 — removing the mutex from the owner's dequeue path is the whole point of a lock-free deque.

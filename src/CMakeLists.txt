@@ -33,3 +33,7 @@ target_compile_options(phanes PRIVATE
     $<$<CXX_COMPILER_ID:MSVC>:/wd4996>
     $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wno-deprecated-declarations>
 )
+
+target_compile_options(phanes_core PRIVATE
+    $<$<CXX_COMPILER_ID:Clang>:-Wno-odr>
+)

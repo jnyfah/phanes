@@ -1,18 +1,13 @@
 module;
 
-#include <algorithm>
-#include <atomic>
 #include <condition_variable>
-#include <cstddef>
 #include <functional>
 #include <limits>
-#include <memory>
 #include <mutex>
 #include <queue>
 #include <random>
 #include <stdexcept>
 #include <thread>
-#include <utility>
 #include <vector>
 
 module builder:scheduler;
@@ -28,7 +23,6 @@ struct Worker
     auto operator=(const Worker&) -> Worker& = delete;
 
     std::thread thread;
-    std::mutex guard;
     LockFreeDeque<std::size_t> tasks;
 };
 
@@ -74,49 +68,24 @@ class ThreadPool
 
             auto& victim = *workers[victim_id];
 
-            std::unique_lock lock(victim.guard, std::try_to_lock);
-
-            if (!lock || victim.tasks.empty())
+            auto task_id = victim.tasks.steal_front();
+            if (!task_id)
             {
                 continue;
             }
 
-            size_t steal_count = std::max<size_t>(1, victim.tasks.size() / 2);
-
-            // fixed array because max we can have is capaity/2 - this will chnage if deque becomes dynamic
-            std::optional<std::size_t> task_id;
-            std::size_t extras[31];
-            size_t extras_count = 0;
-
+            size_t steal_count = victim.tasks.size() / 2;
+            auto& stealer = *workers[self];
             for (size_t i = 0; i < steal_count; ++i)
             {
-                auto t = victim.tasks.pop_back();
+                auto t = victim.tasks.steal_front();
                 if (!t)
                 {
                     break;
                 }
-                if (i == 0)
-                {
-                    task_id = t;
-                }
-                else
-                {
-                    extras[extras_count++] = *t;
-                }
+                stealer.tasks.push_back(*t);
             }
 
-            // release victim lock before acquiring stealer lock
-            lock.unlock();
-
-            if (extras_count > 0)
-            {
-                auto& stealer = *workers[self];
-                std::lock_guard my_lock(stealer.guard);
-                for (size_t i = 0; i < extras_count; ++i)
-                {
-                    stealer.tasks.push_back(extras[i]);
-                }
-            }
             return task_id;
         }
         return std::nullopt;
@@ -134,11 +103,9 @@ class ThreadPool
             // Try local
             {
                 auto& w = *workers[id];
-                std::lock_guard lock(w.guard);
-
                 if (!w.tasks.empty())
                 {
-                    task_id = w.tasks.steal_front();
+                    task_id = w.tasks.pop_back();
                 }
             }
 
@@ -225,17 +192,12 @@ class ThreadPool
         else
         {
             auto& worker = *workers[current_worker_id];
-            size_t local_size;
-            bool pushed_local; // this will be fixed once we make deque dynamic
+            if (!is_active)
             {
-                std::lock_guard lock(worker.guard);
-                if (!is_active)
-                {
-                    throw std::runtime_error("ThreadPool stopped");
-                }
-                pushed_local = worker.tasks.push_back(task_id);
-                local_size = worker.tasks.size();
+                throw std::runtime_error("ThreadPool stopped");
             }
+            bool pushed_local = worker.tasks.push_back(task_id); // will be fixed once deque is dynamic
+            size_t local_size = worker.tasks.size();
 
             if (!pushed_local)
             {
