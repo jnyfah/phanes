@@ -196,15 +196,8 @@ class ThreadPool
             {
                 throw std::runtime_error("ThreadPool stopped");
             }
-            bool pushed_local = worker.tasks.push_back(task_id); // will be fixed once deque is dynamic
+            worker.tasks.push_back(task_id);
             size_t local_size = worker.tasks.size();
-
-            if (!pushed_local)
-            {
-                // local queue full — spill to global queue
-                std::lock_guard lock(global_guard);
-                global_queue.push(task_id);
-            }
 
             // if this local queue we just added a task_id to has more than 2 tasks and we also have idle threads wake
             // up the idle thread

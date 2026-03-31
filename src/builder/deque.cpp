@@ -7,29 +7,60 @@ module;
 #include <memory>
 #include <optional>
 #include <type_traits>
+#include <vector>
 
 module builder:deque;
 
 // Typename T here is a trival type of DirectorId (size_t) defined in core
-
 template <typename T>
 class LockFreeDeque
 {
     static_assert(std::is_trivially_copyable_v<T>, "LockFreeDeque<T> expects T to be trivially copyable");
     static_assert(std::is_trivially_destructible_v<T>, "LockFreeDeque<T> expects T to be trivially destructible");
 
-  public:
-    LockFreeDeque() : data(std::make_unique<T[]>(capacity))
+  private:
+    struct Buffer
     {
-        static_assert((capacity & (capacity - 1)) == 0, "capacity must be power of two");
+        std::int64_t capacity;
+        std::int64_t mask;
+        std::unique_ptr<T[]> data;
+
+        explicit Buffer(std::int64_t c)
+            : capacity(c), mask(c - 1), data(std::make_unique<T[]>(static_cast<std::size_t>(c)))
+        {
+            assert(capacity && (!(capacity & (capacity - 1))) && "Capacity must be buf power of 2!");
+        }
+
+        auto resize(std::int64_t f, std::int64_t b) const -> Buffer*
+        {
+            auto* next = new Buffer(capacity * 2);
+            for (std::int64_t i = f; i < b; ++i)
+            {
+                next->data[i & next->mask] = data[i & mask];
+            }
+            return next;
+        }
+
+        Buffer(const Buffer&) = delete;
+        auto operator=(const Buffer&) -> Buffer& = delete;
+    };
+
+  public:
+    explicit LockFreeDeque(std::int64_t cap = 1024)
+    {
+        auto first = std::make_unique<Buffer>(cap);
+        buffer.store(first.get(), std::memory_order_relaxed);
+        oldBuffer.push_back(std::move(first));
     }
+
+    ~LockFreeDeque() = default;
 
     LockFreeDeque(const LockFreeDeque&) = delete;
     auto operator=(const LockFreeDeque&) -> LockFreeDeque& = delete;
     LockFreeDeque(LockFreeDeque&&) = delete;
     auto operator=(LockFreeDeque&&) -> LockFreeDeque& = delete;
 
-    auto push_back(T item) noexcept -> bool
+    auto push_back(T item) noexcept -> void
     {
         const auto b = back.load(std::memory_order_relaxed); // back is an owned variable by one owner, he alone does
                                                              // the writes so so relaxed is enough here.
@@ -37,14 +68,17 @@ class LockFreeDeque
         const auto f = front.load(
             std::memory_order_acquire); // front is shared with thieves, so read it with acquire when checking capacity.
 
-        if (b - f >= capacity)
+        auto* buf = buffer.load(std::memory_order_relaxed);
+        if (b - f >= buf->capacity)
         {
-            return false; // full
+            Buffer* next = buf->resize(f, b);
+            oldBuffer.emplace_back(next);
+            buffer.store(next, std::memory_order_release);
+            buf = next;
         }
 
-        data[b & mask] = item;
+        buf->data[b & buf->mask] = item;
         back.store(b + 1, std::memory_order_release); // then publish the new back
-        return true;
     }
 
     auto pop_back() noexcept -> std::optional<T>
@@ -69,6 +103,7 @@ class LockFreeDeque
                                                       // announce that back changed
             return std::nullopt;
         }
+        auto* buf = buffer.load(std::memory_order_relaxed);
 
         // if there is one item left, CAS to see who wins the race to pick the last item
         if (f == b)
@@ -83,9 +118,9 @@ class LockFreeDeque
 
             // if yes then update back
             back.store(f + 1, std::memory_order_relaxed);
-            return data[b & mask];
+            return buf->data[b & buf->mask];
         }
-        return data[b & mask];
+        return buf->data[b & buf->mask];
     }
 
     auto steal_front() noexcept -> std::optional<T>
@@ -99,7 +134,8 @@ class LockFreeDeque
             return std::nullopt; // empty
         }
 
-        const T value = data[f & mask];
+        auto* buf = buffer.load(std::memory_order_relaxed);
+        const T value = buf->data[f & buf->mask];
 
         if (!front.compare_exchange_strong(f, f + 1, std::memory_order_seq_cst, std::memory_order_relaxed))
         {
@@ -126,9 +162,8 @@ class LockFreeDeque
     }
 
   private:
-    static constexpr std::size_t capacity{64};
-    static constexpr std::size_t mask{capacity - 1};
-    std::unique_ptr<T[]> data;
     alignas(64) std::atomic<std::int64_t> front{0};
     alignas(64) std::atomic<std::int64_t> back{0};
+    std::atomic<Buffer*> buffer;
+    std::vector<std::unique_ptr<Buffer>> oldBuffer;
 };
