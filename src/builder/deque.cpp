@@ -5,9 +5,10 @@ module;
 #include <cstddef>
 #include <memory>
 #include <optional>
-#include <utility>
 
 module builder:deque;
+
+// Typename T here is a trival type of DirectorId (size_t) defined in core
 
 template <typename T>
 class LockFreeDeque
@@ -20,15 +21,17 @@ class LockFreeDeque
 
     auto push_back(T item) -> bool
     {
-        const auto b = back.load(std::memory_order_relaxed);
-        const auto f = front.load(std::memory_order_acquire);
+        const auto b = back.load(std::memory_order_relaxed); // this is an wned variable by one owner, he alone does the
+                                                             // writes so no need for an order
+        const auto f =
+            front.load(std::memory_order_acquire); // acq because we have so many theives so ordering in necessary
 
         if (b - f >= capacity)
         {
             return false;
         }
 
-        data[b & mask] = std::move(item);
+        data[b & mask] = item;
         back.store(b + 1, std::memory_order_release);
         return true;
     }
@@ -44,20 +47,22 @@ class LockFreeDeque
 
         b = b - 1;
         back.store(b, std::memory_order_relaxed);
-        std::atomic_thread_fence(std::memory_order_seq_cst);
+        std::atomic_thread_fence(std::memory_order_seq_cst); // storing back needs to happen before loading front
+                                                             // compulsory, so we can compare the  sucessfully
         auto f = front.load(std::memory_order_relaxed);
 
         if (f > b)
         {
             // if the front has advanced past the back it means that the queue is empty
-            back.store(f, std::memory_order_relaxed);
+            back.store(f, std::memory_order_relaxed); // relaxed because its the owner doing this, and we dont need to
+                                                      // announce that back changed
             return std::nullopt;
         }
 
         // if there is one item left, CAS to see who wins the race to pick the last item
         if (f == b)
         {
-            // am I the one to chnage front ??
+            // am I the one to change front ??
             if (!front.compare_exchange_strong(f, f + 1, std::memory_order_seq_cst, std::memory_order_relaxed))
             {
                 // if no then update the back to b
@@ -67,32 +72,35 @@ class LockFreeDeque
 
             // if yes then update back
             back.store(f + 1, std::memory_order_relaxed);
-            return std::move(data[b & mask]);
+            return data[b & mask];
         }
-        return std::move(data[b & mask]);
+        return data[b & mask];
     }
 
     auto steal_front() -> std::optional<T>
     {
-        auto f = front.load(std::memory_order_acquire);
-        auto b = back.load(std::memory_order_acquire);
+        auto f = front.load(std::memory_order_acquire); // acq because som theives might be stealing as we are too
+        std::atomic_thread_fence(std::memory_order_seq_cst);
+        auto b = back.load(std::memory_order_acquire); // acq because owner might be doing some modification to back
 
         if (f >= b)
         {
             return std::nullopt;
         }
 
-        if (!front.compare_exchange_strong(f, f + 1, std::memory_order_acq_rel, std::memory_order_relaxed))
+        T x = data[f & mask];
+
+        if (!front.compare_exchange_strong(f, f + 1, std::memory_order_seq_cst, std::memory_order_relaxed))
         {
             return std::nullopt;
         }
 
-        return std::move(data[f & mask]);
+        return x;
     }
 
     [[nodiscard]] auto empty() const -> bool
     {
-        const size_t f = front.load(std::memory_order_acquire);
+        const size_t f = front.load(std::memory_order_acquire); // acq because we need to observe front and back
         const size_t b = back.load(std::memory_order_acquire);
 
         return f >= b;
@@ -101,7 +109,7 @@ class LockFreeDeque
     [[nodiscard]] auto size() const -> std::size_t
     {
 
-        const size_t f = front.load(std::memory_order_acquire);
+        const size_t f = front.load(std::memory_order_acquire); // acq because we need to observe front and back
         const size_t b = back.load(std::memory_order_acquire);
         return (b >= f) ? (b - f) : 0;
     }
