@@ -1,3 +1,7 @@
 CompileFlags:
   CompilationDatabase: build/ninja-debug
-  
+
+Diagnostics:
+  Suppress:
+    - module_odr_violation_function
+    - module_odr_violation_record

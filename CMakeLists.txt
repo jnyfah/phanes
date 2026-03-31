@@ -13,3 +13,8 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 
 add_subdirectory(src)
+
+option(PHANES_BUILD_BENCHMARKS "Build Google Benchmark benchmarks" OFF)
+if(PHANES_BUILD_BENCHMARKS)
+    add_subdirectory(benchmark)
+endif()
