@@ -102,3 +102,64 @@ The biggest bang right now is alignas(64) on Worker + fixing the victim iteratio
 Now I have everything I need. The fix: collect all results into local vectors during the I/O phase (no lock), then commit with one lock acquisition per directory.
 
 be able to have less ha 1s displayed
+
+
+
+
+
+
+
+
+
+
+
+High impact
+1. std::function for the handler (scheduler.cpp:28, scheduler.cpp:151)
+Every single task execution goes through std::function's type-erasure (heap allocation on construction, indirect call through a vtable on invocation). Template the ThreadPool on the handler type instead:
+
+
+template <typename Handler>
+class ThreadPool { ... };
+The call at line 151 becomes a direct, inlinable call. This is the hottest path in the entire scheduler.
+
+2. Redundant empty() before pop_back() (scheduler.cpp:95-98)
+
+
+if (!w.tasks.empty())       // loads front + back (relaxed)
+    task_id = w.tasks.pop_back();  // loads back again (relaxed)
+pop_back() already returns nullopt on an empty deque. The empty() check is two wasted atomic loads on every loop iteration. Just call pop_back() unconditionally.
+
+3. Global queue: pop one at a time under a lock (scheduler.cpp:104-111)
+If many tasks arrive globally, each worker acquires the mutex and pops exactly one item. Drain a batch into the local deque per lock acquisition (e.g., up to N items) to amortize the lock cost.
+
+4. workers[id] pointer chase in the hot loop (scheduler.cpp:94)
+*workers[id] is a double-dereference (vector element → unique_ptr target) on every iteration. Cache it once at the top of worker_loop:
+
+
+Worker& self_worker = *workers[id];
+Medium impact
+5. yield() in the steal retry loop (scheduler.cpp:121)
+std::this_thread::yield() is a syscall hint that can actually surrender the timeslice. In a tight work-stealing spin loop, a CPU pause instruction is better — __builtin_ia32_pause() (x86) or std::atomic_thread_fence(std::memory_order_seq_cst) as a portable substitute. Reserve yield() for after all steal attempts are exhausted (just before sleeping).
+
+6. Fixed steal order creates consistent victim contention (scheduler.cpp:55-57)
+After the fix to linear scanning, worker 0 always tries worker 1 first, worker 1 always tries worker 2, etc. Under load, worker N-1's queue gets hit by both worker N-2 and the wraparound. Randomizing only the starting offset once per worker_loop iteration (not per attempt) removes the fixed bias without reintroducing the original repeat-sampling problem:
+
+
+const size_t start = some_counter++ % (N - 1); // per-loop, not per-attempt
+for (size_t i = 1; i < N; ++i)
+    const size_t victim_id = (self + start + i) % N;
+Lower impact
+7. oldBuffer growth (deque.cpp:162)
+The vector<unique_ptr<Buffer>> grows forever and is never collected. Safe, but under resize-heavy workloads it puts pressure on the allocator and touches extra memory. Epoch-based reclamation (even just a simple two-phase delayed free) would bound it, but this is only a problem if your task counts wildly oscillate.
+
+8. std::queue (backed by std::deque) for global queue (scheduler.cpp:39)
+std::deque has poor cache locality due to its segmented block structure. A fixed-size ring buffer (power-of-2, index-masked) would be tighter if you can bound the global queue depth. Minor unless the global queue is hit frequently.
+
+Summary priority
+Change	Where	Effort
+Template handler, eliminate std::function	scheduler	Low
+Remove redundant empty() before pop_back()	scheduler	Trivial
+Batch drain global queue	scheduler	Low
+Cache worker pointer in hot loop	scheduler	Trivial
+Pause hint in steal spin	scheduler	Trivial
+Randomize steal start offset	scheduler	Low

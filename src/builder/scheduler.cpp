@@ -1,7 +1,6 @@
 module;
 
 #include <condition_variable>
-#include <functional>
 #include <limits>
 #include <mutex>
 #include <queue>
@@ -25,10 +24,10 @@ struct Worker
     LockFreeDeque<std::size_t> tasks;
 };
 
-using Handler = std::function<void(std::size_t)>;
-
 static constexpr size_t NO_WORKER_ID = std::numeric_limits<size_t>::max();
 static thread_local size_t current_worker_id = NO_WORKER_ID;
+
+template <typename Handler>
 class ThreadPool
 {
   private:
@@ -44,7 +43,7 @@ class ThreadPool
 
     Handler handler;
 
-    auto try_steal(size_t self) -> std::optional<std::size_t>
+    auto try_steal(Worker& self_worker, size_t self, size_t& start_counter) -> std::optional<std::size_t>
     {
         const size_t N = workers.size();
         if (N <= 1)
@@ -52,9 +51,12 @@ class ThreadPool
             return std::nullopt;
         }
 
-        for (size_t i = 1; i < N; ++i)
+        const size_t start = start_counter++ % (N - 1);
+
+        for (size_t k = 0; k < N - 1; ++k)
         {
-            const size_t victim_id = (self + i) % N;
+            const size_t offset = 1 + ((start + k) % (N - 1));
+            const size_t victim_id = (self + offset) % N;
             auto& victim = *workers[victim_id];
 
             auto task_id = victim.tasks.steal_front();
@@ -64,7 +66,6 @@ class ThreadPool
             }
 
             size_t steal_count = victim.tasks.size() / 2;
-            auto& stealer = *workers[self];
             for (size_t j = 0; j < steal_count; ++j)
             {
                 auto t = victim.tasks.steal_front();
@@ -72,11 +73,12 @@ class ThreadPool
                 {
                     break;
                 }
-                stealer.tasks.push_back(*t);
+                self_worker.tasks.push_back(*t);
             }
 
             return task_id;
         }
+
         return std::nullopt;
     }
 
@@ -84,6 +86,8 @@ class ThreadPool
     {
         current_worker_id = id;
         constexpr size_t STEAL_ATTEMPTS = 64;
+        Worker& self_worker = *workers[id];
+        size_t steal_start_counter = 0;
 
         while (true)
         {
@@ -91,11 +95,7 @@ class ThreadPool
 
             // Try local
             {
-                auto& w = *workers[id];
-                if (!w.tasks.empty())
-                {
-                    task_id = w.tasks.pop_back();
-                }
+                task_id = self_worker.tasks.pop_back();
             }
 
             // try global
@@ -115,11 +115,12 @@ class ThreadPool
             {
                 for (size_t i = 0; i < STEAL_ATTEMPTS && !task_id; ++i)
                 {
-                    task_id = try_steal(id);
-                    if (!task_id)
-                    {
-                        std::this_thread::yield();
-                    }
+                    task_id = try_steal(self_worker, id, steal_start_counter);
+                }
+
+                if (!task_id)
+                {
+                    std::this_thread::yield();
                 }
             }
 
@@ -219,7 +220,3 @@ class ThreadPool
     ThreadPool(ThreadPool&&) = delete;
     auto operator=(ThreadPool&&) -> ThreadPool& = delete;
 };
-
-// try stealing multiple times before sleeping
-// Better wake policy:
-// Steal batches.
