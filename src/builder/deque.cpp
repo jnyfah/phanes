@@ -60,7 +60,7 @@ class LockFreeDeque
     LockFreeDeque(LockFreeDeque&&) = delete;
     auto operator=(LockFreeDeque&&) -> LockFreeDeque& = delete;
 
-    auto push_back(T item) noexcept -> void
+    auto push_back(T item) -> void
     {
         const auto b = back.load(std::memory_order_relaxed); // back is an owned variable by one owner, he alone does
                                                              // the writes so so relaxed is enough here.
@@ -85,11 +85,6 @@ class LockFreeDeque
     {
         auto b = back.load(std::memory_order_relaxed);
 
-        if (b == 0)
-        {
-            return std::nullopt; // guard against underflow as b cant be -1
-        }
-
         b = b - 1;
         back.store(b, std::memory_order_relaxed);
         std::atomic_thread_fence(std::memory_order_seq_cst); // storing back needs to happen before loading front
@@ -111,7 +106,7 @@ class LockFreeDeque
             // am I the one to change front ??
             if (!front.compare_exchange_strong(f, f + 1, std::memory_order_seq_cst, std::memory_order_relaxed))
             {
-                // if no then update the back to b
+                // if no, a thief took the last item; restore back to match the new front
                 back.store(f, std::memory_order_relaxed);
                 return std::nullopt;
             }
@@ -147,23 +142,22 @@ class LockFreeDeque
 
     [[nodiscard]] auto empty() const noexcept -> bool
     {
-        const auto f = front.load(std::memory_order_acquire); // acq because we need to observe front and back
-        const auto b = back.load(std::memory_order_acquire);
+        const auto f = front.load(std::memory_order_relaxed); // relaxed: just reading counters, no associated memory to synchronize
+        const auto b = back.load(std::memory_order_relaxed);
 
         return f >= b;
     }
 
     [[nodiscard]] auto size() const noexcept -> std::size_t
     {
-
-        const auto f = front.load(std::memory_order_acquire); // acq because we need to observe front and back
-        const auto b = back.load(std::memory_order_acquire);
+        const auto f = front.load(std::memory_order_relaxed); // relaxed: result is inherently approximate (two separate loads),
+        const auto b = back.load(std::memory_order_relaxed);  //          no acquire-release pair to complete here
         return (b > f) ? static_cast<std::size_t>(b - f) : 0;
     }
 
   private:
     alignas(64) std::atomic<std::int64_t> front{0};
     alignas(64) std::atomic<std::int64_t> back{0};
-    std::atomic<Buffer*> buffer;
+    alignas(64) std::atomic<Buffer*> buffer;
     std::vector<std::unique_ptr<Buffer>> oldBuffer;
 };

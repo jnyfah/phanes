@@ -5,7 +5,6 @@ module;
 #include <limits>
 #include <mutex>
 #include <queue>
-#include <random>
 #include <stdexcept>
 #include <thread>
 #include <vector>
@@ -30,8 +29,6 @@ using Handler = std::function<void(std::size_t)>;
 
 static constexpr size_t NO_WORKER_ID = std::numeric_limits<size_t>::max();
 static thread_local size_t current_worker_id = NO_WORKER_ID;
-static thread_local std::mt19937 rng{std::random_device{}()};
-
 class ThreadPool
 {
   private:
@@ -55,17 +52,9 @@ class ThreadPool
             return std::nullopt;
         }
 
-        // randomize the ids for the workers we are trying to steal from
-        std::uniform_int_distribution<size_t> dist(0, N - 1);
-
-        for (size_t attempt = 0; attempt < N; ++attempt)
+        for (size_t i = 1; i < N; ++i)
         {
-            size_t victim_id = dist(rng);
-            if (victim_id == self)
-            {
-                continue;
-            }
-
+            const size_t victim_id = (self + i) % N;
             auto& victim = *workers[victim_id];
 
             auto task_id = victim.tasks.steal_front();
@@ -76,7 +65,7 @@ class ThreadPool
 
             size_t steal_count = victim.tasks.size() / 2;
             auto& stealer = *workers[self];
-            for (size_t i = 0; i < steal_count; ++i)
+            for (size_t j = 0; j < steal_count; ++j)
             {
                 auto t = victim.tasks.steal_front();
                 if (!t)
@@ -137,11 +126,13 @@ class ThreadPool
             // shutdown
             if (!task_id)
             {
+                // Keep track of idle threads
                 idle_workers.fetch_add(1, std::memory_order_relaxed);
                 {
                     std::unique_lock lock(global_guard);
                     if (!is_active.load(std::memory_order_relaxed))
                     {
+                        // no longer a worker
                         idle_workers.fetch_sub(1, std::memory_order_relaxed);
                         return;
                     }
@@ -200,7 +191,7 @@ class ThreadPool
             size_t local_size = worker.tasks.size();
 
             // if this local queue we just added a task_id to has more than 2 tasks and we also have idle threads wake
-            // up the idle thread
+            // up the idle thread so they can start stealing!!!!!!
             if (local_size > 1 && idle_workers.load(std::memory_order_relaxed) > 0)
             {
                 condition.notify_one();
