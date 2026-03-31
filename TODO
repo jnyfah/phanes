@@ -74,3 +74,29 @@ The condition variable uses global_guard which is also used by submit. Under loa
 A worker wakes if pending_tasks > 0 but the task may already be claimed by the time it checks. You could track a submitted_since_last_steal counter to make the wakeup more precise, but this is minor.
 
 The biggest win by far is #1 — removing the mutex from the owner's dequeue path is the whole point of a lock-free deque.
+
+
+
+
+
+
+False sharing: Yes, still present. front and back are alignas(64) within the deque, but the Worker struct itself has no alignment — so two adjacent workers' heap allocations can share a cache line. Add alignas(64) to Worker.
+
+Other things worth looking at:
+
+Pointer indirection on the hot path — data is a unique_ptr<T[]>, so every push_back/steal_front dereferences a pointer. Since capacity is fixed at 64, an inline T data[64] array would eliminate that. You said deque will be dynamic later so maybe defer this.
+
+Random victim wastes attempts — dist(rng) can pick the same victim multiple times across N tries. Linear wrap starting from self + 1 is simpler and guarantees each worker is tried exactly once.
+
+RNG cost — mt19937 + uniform_int_distribution on every steal attempt is expensive for what it's doing. If you keep random selection, xorshift64 would be much lighter.
+
+steal_count computed after first steal — victim.tasks.size() / 2 is evaluated after you already removed one item, so you're actually stealing slightly less than half. Compute it before the first steal_front.
+
+Spill to global doesn't notify — when push_back returns false and you spill to global queue, there's no condition.notify_one(). A sleeping worker won't wake for it.
+
+The biggest bang right now is alignas(64) on Worker + fixing the victim iteration. Everything else is smaller.
+
+
+Now I have everything I need. The fix: collect all results into local vectors during the I/O phase (no lock), then commit with one lock acquisition per directory.
+
+be able to have less ha 1s displayed
