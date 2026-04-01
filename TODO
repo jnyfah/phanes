@@ -54,28 +54,6 @@ Acquire across threads: if the load sees a value stored with release, then prior
 
 
 
-3. tree.directories[id].path read (line 71)
-This is the only READ under the lock, and it's only locked because tree.directories is a std::vector that could reallocate. If you switch tree.directories to std::deque, existing element references are stable across push_back — no reallocation ever invalidates them. The read can then happen without any lock.
-
-4. tree.directories[id].subdirs.push_back and tree.directories[id].files.push_back (lines 116, 150)
-These modify a specific directory node's children. Crucially, each directory id is processed by exactly one worker — so tree.directories[id].subdirs and tree.directories[id].files are never touched by two threads simultaneously. With stable references (deque), these also need no lock.
-
-5. tree.directories.push_back, tree.files.push_back, tree.errors.push_back (lines 115, 149, 155, 160, 168, 88, 99)
-These are concurrent pushes to shared vectors from multiple workers. These still need synchronization — you can't avoid it without a fundamentally different data structure. This is where the lock genuinely earns its keep.
-
-What this buys you:
-
-Currently the lock is held across the entire directory-case block (lines 109–118), which includes ID generation, vector push, AND subdirs.push_back. After these changes, the lock is held only for the actual push_back to the shared vectors — the minimum possible critical section.
-
-The active_tasks atomic + wait/notify removes the lock entirely from the completion tracking path, which is taken once per directory.
-
-The remaining lock on push_back is unavoidable without switching to a lock-free concurrent queue for tree.directories, tree.files, and tree.errors — which would be a much larger change and likely not worth it given the I/O dominates anyway.
-
-
-
-
-
-
 mordern cpp
 Genuine opportunities
 1. std::expected in the parser — this is the biggest one

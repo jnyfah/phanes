@@ -4,6 +4,7 @@ module;
 #include <filesystem>
 #include <functional>
 #include <mutex>
+#include <shared_mutex>
 #include <system_error>
 module builder;
 
@@ -17,7 +18,8 @@ struct Scanner
     void scan_directory(DirectoryId id);
 
     DirectoryTree tree;
-    std::mutex guard;
+    std::shared_mutex dir_mutex; // shared for reads/per-node writes, exclusive for push_back
+    std::mutex guard; // exclusive for tree.files and tree.errors
     std::atomic_int active_tasks{0};
     std::atomic<DirectoryId> next_dir_id{0};
     std::atomic<FileId> next_file_id{0};
@@ -28,7 +30,7 @@ void Scanner::scan_directory(DirectoryId id)
 {
     const std::filesystem::path dirPath = [&]
     {
-        std::lock_guard lock(guard);
+        std::shared_lock lock(dir_mutex);
         return tree.directories[id].path;
     }();
 
@@ -62,18 +64,21 @@ void Scanner::scan_directory(DirectoryId id)
         {
         case std::filesystem::file_type::directory:
         {
+            DirectoryNode directory{};
+            directory.parent = id;
+            directory.path = entry.path();
             DirectoryId dirId;
             {
-                std::lock_guard lock(guard);
+                std::unique_lock lock(dir_mutex);
                 dirId = next_dir_id.fetch_add(1, std::memory_order_relaxed);
-                DirectoryNode directory{};
                 directory.id = dirId;
-                directory.parent = id;
-                directory.path = entry.path();
                 tree.directories.push_back(directory);
-                tree.directories[id].subdirs.push_back(dirId);
-                ++active_tasks;
             }
+            {
+                std::shared_lock lock(dir_mutex);
+                tree.directories[id].subdirs.push_back(dirId);
+            }
+            active_tasks.fetch_add(1, std::memory_order_relaxed);
             submit_task(dirId);
             break;
         }
@@ -101,11 +106,10 @@ void Scanner::scan_directory(DirectoryId id)
                 file.modified = std::chrono::floor<std::chrono::seconds>(sysTime);
             }
 
+            file.id = next_file_id.fetch_add(1, std::memory_order_relaxed);
             {
                 std::lock_guard lock(guard);
-                file.id = next_file_id.fetch_add(1, std::memory_order_relaxed);
                 tree.files.push_back(file);
-                tree.directories[id].files.push_back(file.id);
 
                 if (!is_symlink && size_ec && size_ec != std::errc::permission_denied &&
                     size_ec != std::errc::no_such_file_or_directory)
@@ -117,6 +121,10 @@ void Scanner::scan_directory(DirectoryId id)
                 {
                     tree.errors.push_back({entry.path(), ErrorKind::FileError, NodeKind::File});
                 }
+            }
+            {
+                std::shared_lock lock(dir_mutex);
+                tree.directories[id].files.push_back(file.id);
             }
             break;
         }

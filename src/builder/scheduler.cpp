@@ -3,6 +3,7 @@ module;
 #include <condition_variable>
 #include <limits>
 #include <mutex>
+#include <optional>
 #include <stdexcept>
 #include <thread>
 #include <vector>
