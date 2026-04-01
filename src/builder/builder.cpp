@@ -1,6 +1,6 @@
 module;
+#include <atomic>
 #include <chrono>
-#include <condition_variable>
 #include <filesystem>
 #include <functional>
 #include <mutex>
@@ -18,10 +18,9 @@ struct Scanner
 
     DirectoryTree tree;
     std::mutex guard;
-    std::condition_variable done_cv;
-    int active_tasks{0};
-    DirectoryId next_dir_id{0};
-    FileId next_file_id{0};
+    std::atomic_int active_tasks{0};
+    std::atomic<DirectoryId> next_dir_id{0};
+    std::atomic<FileId> next_file_id{0};
     std::function<void(DirectoryId)> submit_task;
 };
 
@@ -66,7 +65,7 @@ void Scanner::scan_directory(DirectoryId id)
             DirectoryId dirId;
             {
                 std::lock_guard lock(guard);
-                dirId = next_dir_id++;
+                dirId = next_dir_id.fetch_add(1, std::memory_order_relaxed);
                 DirectoryNode directory{};
                 directory.id = dirId;
                 directory.parent = id;
@@ -104,7 +103,7 @@ void Scanner::scan_directory(DirectoryId id)
 
             {
                 std::lock_guard lock(guard);
-                file.id = next_file_id++;
+                file.id = next_file_id.fetch_add(1, std::memory_order_relaxed);
                 tree.files.push_back(file);
                 tree.directories[id].files.push_back(file.id);
 
@@ -132,10 +131,9 @@ void Scanner::scan_directory(DirectoryId id)
         }
     }
 
+    if (active_tasks.fetch_sub(1, std::memory_order_release) == 1)
     {
-        std::lock_guard lock(guard);
-        if (--active_tasks == 0)
-            done_cv.notify_one();
+        active_tasks.notify_one();
     }
 }
 
@@ -171,7 +169,7 @@ auto Scanner::build(const std::filesystem::path& root) -> DirectoryTree
     }
 
     DirectoryNode root_node{};
-    root_node.id = next_dir_id++;
+    root_node.id = next_dir_id.fetch_add(1, std::memory_order_relaxed);
     root_node.parent = std::nullopt;
     root_node.path = normalizedRoot;
     tree.directories.push_back(root_node);
@@ -180,15 +178,14 @@ auto Scanner::build(const std::filesystem::path& root) -> DirectoryTree
     ThreadPool pool(8, [this](DirectoryId id) { scan_directory(id); });
     submit_task = [&pool](DirectoryId id) { pool.submit(id); };
 
-    {
-        std::lock_guard lock(guard);
-        ++active_tasks;
-    }
+    active_tasks.fetch_add(1, std::memory_order_relaxed);
+
     submit_task(tree.root.value());
 
+    int expected;
+    while ((expected = active_tasks.load(std::memory_order_relaxed)) != 0)
     {
-        std::unique_lock lock(guard);
-        done_cv.wait(lock, [this] { return active_tasks == 0; });
+        active_tasks.wait(expected);
     }
 
     return finish();
