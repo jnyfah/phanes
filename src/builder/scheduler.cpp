@@ -3,7 +3,6 @@ module;
 #include <condition_variable>
 #include <limits>
 #include <mutex>
-#include <queue>
 #include <stdexcept>
 #include <thread>
 #include <vector>
@@ -33,9 +32,7 @@ class ThreadPool
   private:
     std::vector<std::unique_ptr<Worker>> workers;
     std::condition_variable condition;
-    std::mutex global_guard;
-
-    std::queue<std::size_t> global_queue;
+    std::mutex sleep_guard;
 
     std::atomic<bool> is_active{true};
     std::atomic<size_t> idle_workers{0};
@@ -98,18 +95,6 @@ class ThreadPool
                 task_id = self_worker.tasks.pop_back();
             }
 
-            // try global
-            if (!task_id)
-            {
-                std::lock_guard lock(global_guard);
-
-                if (!global_queue.empty())
-                {
-                    task_id = global_queue.front();
-                    global_queue.pop();
-                }
-            }
-
             // try steal
             if (!task_id)
             {
@@ -130,7 +115,7 @@ class ThreadPool
                 // Keep track of idle threads
                 idle_workers.fetch_add(1, std::memory_order_relaxed);
                 {
-                    std::unique_lock lock(global_guard);
+                    std::unique_lock lock(sleep_guard);
                     if (!is_active.load(std::memory_order_relaxed))
                     {
                         // no longer a worker
@@ -170,15 +155,12 @@ class ThreadPool
         pending_tasks.fetch_add(1, std::memory_order_relaxed);
         if (current_worker_id == NO_WORKER_ID)
         {
-            // add to global queue
+            // external submit: push directly to worker 0 and wake a sleeper
+            if (!is_active)
             {
-                std::lock_guard lock(global_guard);
-                if (!is_active)
-                {
-                    throw std::runtime_error("ThreadPool stopped");
-                }
-                global_queue.push(task_id);
+                throw std::runtime_error("ThreadPool stopped");
             }
+            workers[0]->tasks.push_back(task_id);
             condition.notify_one();
         }
         else
