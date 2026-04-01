@@ -31,9 +31,9 @@ class LockFreeDeque
             assert(capacity && (!(capacity & (capacity - 1))) && "Capacity must be buf power of 2!");
         }
 
-        auto resize(std::int64_t f, std::int64_t b) const -> Buffer*
+        auto resize(std::int64_t f, std::int64_t b) const -> std::unique_ptr<Buffer>
         {
-            auto* next = new Buffer(capacity * 2);
+            auto next = std::make_unique<Buffer>(capacity * 2);
             for (std::int64_t i = f; i < b; ++i)
             {
                 next->data[i & next->mask] = data[i & mask];
@@ -71,10 +71,11 @@ class LockFreeDeque
         auto* buf = buffer.load(std::memory_order_relaxed);
         if (b - f >= buf->capacity)
         {
-            Buffer* next = buf->resize(f, b);
-            oldBuffer.emplace_back(next);
-            buffer.store(next, std::memory_order_release);
-            buf = next;
+            auto next = buf->resize(f, b);
+            Buffer* next_raw = next.get();
+            oldBuffer.push_back(std::move(next));
+            buffer.store(next_raw, std::memory_order_release);
+            buf = next_raw;
         }
 
         buf->data[b & buf->mask] = item;
@@ -142,7 +143,8 @@ class LockFreeDeque
 
     [[nodiscard]] auto empty() const noexcept -> bool
     {
-        const auto f = front.load(std::memory_order_relaxed); // relaxed: just reading counters, no associated memory to synchronize
+        const auto f = front.load(
+            std::memory_order_relaxed); // relaxed: just reading counters, no associated memory to synchronize
         const auto b = back.load(std::memory_order_relaxed);
 
         return f >= b;
@@ -150,8 +152,9 @@ class LockFreeDeque
 
     [[nodiscard]] auto size() const noexcept -> std::size_t
     {
-        const auto f = front.load(std::memory_order_relaxed); // relaxed: result is inherently approximate (two separate loads),
-        const auto b = back.load(std::memory_order_relaxed);  //          no acquire-release pair to complete here
+        const auto f =
+            front.load(std::memory_order_relaxed); // relaxed: result is inherently approximate (two separate loads),
+        const auto b = back.load(std::memory_order_relaxed); //          no acquire-release pair to complete here
         return (b > f) ? static_cast<std::size_t>(b - f) : 0;
     }
 

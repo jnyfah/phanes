@@ -54,20 +54,6 @@ Acquire across threads: if the load sees a value stored with release, then prior
 
 
 
-et me break down what guard is actually protecting, because it's doing several different jobs:
-
-1. next_dir_id / next_file_id counters (lines 110, 148)
-Your instinct is right — these can be std::atomic<DirectoryId> / std::atomic<FileId> with fetch_add. No lock needed.
-
-2. active_tasks counter (lines 117, 177, 184)
-This can also be std::atomic<int>. In C++20 you get atomic::wait() and atomic::notify_one() — so the done_cv + guard for the completion check can be replaced entirely:
-
-
-std::atomic<int> active_tasks{0};
-// decrement: if (active_tasks.fetch_sub(1) == 1) active_tasks.notify_one();
-// wait: active_tasks.wait(non_zero_value);
-This removes the lock from the hot per-directory completion path entirely.
-
 3. tree.directories[id].path read (line 71)
 This is the only READ under the lock, and it's only locked because tree.directories is a std::vector that could reallocate. If you switch tree.directories to std::deque, existing element references are stable across push_back — no reallocation ever invalidates them. The read can then happen without any lock.
 
