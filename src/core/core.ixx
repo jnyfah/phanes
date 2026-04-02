@@ -2,6 +2,7 @@ module;
 
 #include <chrono>
 #include <cstdint>
+#include <deque>
 #include <filesystem>
 #include <optional>
 #include <vector>
@@ -60,8 +61,8 @@ export struct DirectoryTree
 {
     std::optional<DirectoryId> root;
 
-    std::vector<FileNode> files;
-    std::vector<DirectoryNode> directories;
+    std::deque<FileNode> files;
+    std::deque<DirectoryNode> directories;
     std::vector<ErrorRecord> errors;
 
     std::chrono::sys_time<std::chrono::seconds> scan_started;

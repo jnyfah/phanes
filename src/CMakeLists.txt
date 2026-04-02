@@ -8,6 +8,7 @@ target_sources(phanes_core
       core/core.ixx
       builder/builder.ixx
       builder/scheduler.cpp 
+      builder/deque.cpp 
       analyzer/analyzer.ixx
       parser/parser.ixx
       view/view.ixx
@@ -31,4 +32,8 @@ target_link_libraries(phanes
 target_compile_options(phanes PRIVATE
     $<$<CXX_COMPILER_ID:MSVC>:/wd4996>
     $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wno-deprecated-declarations>
+)
+
+target_compile_options(phanes_core PRIVATE
+    $<$<CXX_COMPILER_ID:Clang>:-Wno-odr>
 )
