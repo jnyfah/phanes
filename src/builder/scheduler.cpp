@@ -58,7 +58,7 @@ class ThreadPool
             auto& victim = *workers[victim_id];
 
             auto task_id = victim.tasks.steal_front();
-            if (!task_id)
+            if (!task_id.has_value())
             {
                 continue;
             }
@@ -97,21 +97,21 @@ class ThreadPool
             }
 
             // try steal
-            if (!task_id)
+            if (!task_id.has_value())
             {
                 for (size_t i = 0; i < STEAL_ATTEMPTS && !task_id; ++i)
                 {
                     task_id = try_steal(self_worker, id, steal_start_counter);
                 }
 
-                if (!task_id)
+                if (!task_id.has_value())
                 {
                     std::this_thread::yield();
                 }
             }
 
             // shutdown
-            if (!task_id)
+            if (!task_id.has_value())
             {
                 // Keep track of idle threads
                 idle_workers.fetch_add(1, std::memory_order_relaxed);
@@ -139,7 +139,7 @@ class ThreadPool
     }
 
   public:
-    explicit ThreadPool(Handler hand, size_t threads = std::thread::hardware_concurrency()) : handler(std::move(hand))
+    explicit ThreadPool(Handler hand, size_t threads = std::jthread::hardware_concurrency()) : handler(std::move(hand))
     {
         workers.reserve(threads);
         for (size_t i = 0; i < threads; ++i)
