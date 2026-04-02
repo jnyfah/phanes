@@ -64,13 +64,6 @@ Genuine opportunities
 1. std::expected in the parser — this is the biggest one
 ParseResult has a success bool + errors vector — that's exactly what std::expected was designed to replace. The individual handlers like parse_positive_size could return std::expected<size_t, std::string> instead of returning 0 and side-effecting into an error list. Cleaner call sites, no implicit sentinel values.
 
-2. Concepts on LockFreeDeque and ThreadPool
-The static_assert pair in the deque:
-
-
-static_assert(std::is_trivially_copyable_v<T>, ...);
-static_assert(std::is_trivially_destructible_v<T>, ...);
-is exactly what a concept expresses — and you get the constraint at the point of instantiation with a cleaner error. Same for ThreadPool<Handler> — a std::invocable<Handler, DirectoryId> constraint makes the template's expectation explicit.
 
 3. std::print / std::println in view.cpp
 You're already using std::format — C++23 std::print is the natural next step. Eliminates the std::cout << std::format(...) pattern entirely.
@@ -83,9 +76,6 @@ compute_extension_stats builds an unordered_map then sorts at the end. Since you
 
 What probably doesn't fit
 Coroutines / std::async: Your work-stealing scheduler is strictly better than std::async for this use case — you have a warm thread pool, balanced load, and no per-task thread overhead. Coroutines would add complexity without throughput gains since the bottleneck is filesystem I/O, not scheduling overhead. The learning you did on lock-free structures is the right tool here.
-
-std::jthread in Worker: Could replace std::thread and the manual joinable() check in the destructor since jthread auto-joins, but it's a minor cosmetic change given you already handle it correctly.
-
 std::mdspan: No multi-dimensional data here.
 
 Summary
@@ -140,34 +130,3 @@ largest_file → FileId	Trivial	Low
 Combined multi-action pass over tree.files	Medium	High (for large trees)
 flat_map for extensions	Low	Low-medium
 The combined multi-action pass is the architectural one worth thinking about — everything else is cleanup.
-
-
-
-
-
-
-
-Builder
-
- few real things remain.
-
-1. tree.files is still std::vector — same reallocation problem directories had
-
-Every worker holds guard while calling tree.files.push_back(file). When the vector runs out of capacity it reallocates — copying every existing FileNode (each containing a std::filesystem::path, a heap-allocated string) while the mutex is held. During that copy, all 8 workers are blocked. Switch tree.files to std::deque<FileNode> in core.ixx — same fix, same reason.
-
-3. guard mutex is acquired once per file — high contention
-
-Every file discovered by every worker acquires guard exclusively to push to tree.files. On a directory with 100k files, that's 100k sequential lock acquisitions per worker. The real fix is per-worker local file buffers — each worker accumulates files locally and flushes at the end of each directory scan. Lock acquisitions drop from O(total_files) to O(total_directories). File IDs would be assigned at flush time using next_file_id.fetch_add(batch_size). This is the highest-impact remaining change.
-
-
-5. The hard real ceiling: syscalls
-
-symlink_status, file_size, last_write_time — each is a stat() syscall per file. On Linux these are not cached from the readdir call. With 1M files you're doing 3M syscalls. There's nothing in the C++ layer you can do about this — it's the OS. On fast NVMe this is tolerable; on HDD it's the dominant cost regardless of how optimised the rest is.
-
-Priority:
-
-Change	Impact	Effort
-tree.files → std::deque	Medium — eliminates worst-case lock hold	Trivial
-Per-worker local file buffers	High — eliminates most guard contention	Medium
-hardware_concurrency()	Medium — correct on all machines	Trivial
-Remove redundant join()	Cleanup	Trivial

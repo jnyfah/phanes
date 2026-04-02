@@ -6,6 +6,7 @@ module;
 #include <mutex>
 #include <shared_mutex>
 #include <system_error>
+#include <vector>
 module builder;
 
 import :scheduler;
@@ -34,6 +35,10 @@ void Scanner::scan_directory(DirectoryId id)
         return tree.directories[id].path;
     }();
 
+    // this variables will be local to each thread
+    std::vector<FileNode> local_files;
+    std::vector<ErrorRecord> local_errors;
+
     std::error_code type_ec, size_ec, time_ec, itr_ec;
 
     for (std::filesystem::directory_iterator it(dirPath,
@@ -44,8 +49,7 @@ void Scanner::scan_directory(DirectoryId id)
     {
         if (itr_ec && itr_ec != std::errc::permission_denied)
         {
-            std::lock_guard lock(guard);
-            tree.errors.push_back({dirPath, ErrorKind::NotFound, NodeKind::Directory});
+            local_errors.push_back({dirPath, ErrorKind::NotFound, NodeKind::Directory});
             continue;
         }
 
@@ -55,8 +59,7 @@ void Scanner::scan_directory(DirectoryId id)
         auto status = entry.symlink_status(type_ec);
         if (type_ec)
         {
-            std::lock_guard lock(guard);
-            tree.errors.push_back({entry.path(), ErrorKind::FileError, NodeKind::File});
+            local_errors.push_back({entry.path(), ErrorKind::FileError, NodeKind::File});
             continue;
         }
 
@@ -106,36 +109,50 @@ void Scanner::scan_directory(DirectoryId id)
                 file.modified = std::chrono::floor<std::chrono::seconds>(sysTime);
             }
 
-            file.id = next_file_id.fetch_add(1, std::memory_order_relaxed);
+            if (!is_symlink && size_ec && size_ec != std::errc::permission_denied &&
+                size_ec != std::errc::no_such_file_or_directory)
             {
-                std::lock_guard lock(guard);
-                tree.files.push_back(file);
+                local_errors.push_back({entry.path(), ErrorKind::FileError, NodeKind::File});
+            }
+            if (time_ec && time_ec != std::errc::permission_denied && time_ec != std::errc::no_such_file_or_directory)
+            {
+                local_errors.push_back({entry.path(), ErrorKind::FileError, NodeKind::File});
+            }
 
-                if (!is_symlink && size_ec && size_ec != std::errc::permission_denied &&
-                    size_ec != std::errc::no_such_file_or_directory)
-                {
-                    tree.errors.push_back({entry.path(), ErrorKind::FileError, NodeKind::File});
-                }
-                if (time_ec && time_ec != std::errc::permission_denied &&
-                    time_ec != std::errc::no_such_file_or_directory)
-                {
-                    tree.errors.push_back({entry.path(), ErrorKind::FileError, NodeKind::File});
-                }
-            }
-            {
-                std::shared_lock lock(dir_mutex);
-                tree.directories[id].files.push_back(file.id);
-            }
+            local_files.push_back(std::move(file));
             break;
         }
         case std::filesystem::file_type::unknown:
         {
-            std::lock_guard lock(guard);
-            tree.errors.push_back({entry.path(), ErrorKind::Unknown, NodeKind::File});
+            local_errors.push_back({entry.path(), ErrorKind::Unknown, NodeKind::File});
             continue;
         }
         default:
             continue;
+        }
+    }
+
+    // flush local files and errors, one lock acquisition per directory scan
+    {
+        std::lock_guard lock(guard);
+        for (auto& files : local_files)
+        {
+            files.id = next_file_id.fetch_add(1, std::memory_order_relaxed);
+            tree.files.push_back(files);
+        }
+        for (auto& error : local_errors)
+        {
+            tree.errors.push_back(std::move(error));
+        }
+    }
+
+    // update this directory's file list
+    if (!local_files.empty())
+    {
+        std::shared_lock lock(dir_mutex);
+        for (const auto& files : local_files)
+        {
+            tree.directories[id].files.push_back(files.id);
         }
     }
 
