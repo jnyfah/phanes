@@ -14,7 +14,8 @@ module builder:deque;
 template <typename T>
 concept DequeElement = std::is_trivially_copyable_v<T> && std::is_trivially_destructible_v<T>;
 
-// Typename T here is a trival type of DirectorId (size_t) defined in core, so this deque would only work for trivial types
+// Typename T here is a trival type of DirectorId (size_t) defined in core, so this deque would only work for trivial
+// types
 template <DequeElement T>
 class LockFreeDeque
 {
