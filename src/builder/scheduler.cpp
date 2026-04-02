@@ -139,7 +139,7 @@ class ThreadPool
     }
 
   public:
-    explicit ThreadPool(size_t threads, Handler hand) : handler(std::move(hand))
+    explicit ThreadPool(Handler hand, size_t threads = std::thread::hardware_concurrency()) : handler(std::move(hand))
     {
         workers.reserve(threads);
         for (size_t i = 0; i < threads; ++i)

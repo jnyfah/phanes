@@ -61,7 +61,7 @@ export struct DirectoryTree
 {
     std::optional<DirectoryId> root;
 
-    std::vector<FileNode> files;
+    std::deque<FileNode> files;
     std::deque<DirectoryNode> directories;
     std::vector<ErrorRecord> errors;
 

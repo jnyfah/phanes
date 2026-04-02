@@ -11,12 +11,13 @@ module;
 
 module builder:deque;
 
-// Typename T here is a trival type of DirectorId (size_t) defined in core
 template <typename T>
+concept DequeElement = std::is_trivially_copyable_v<T> && std::is_trivially_destructible_v<T>;
+
+// Typename T here is a trival type of DirectorId (size_t) defined in core, so this deque would only work for trivial types
+template <DequeElement T>
 class LockFreeDeque
 {
-    static_assert(std::is_trivially_copyable_v<T>, "LockFreeDeque<T> expects T to be trivially copyable");
-    static_assert(std::is_trivially_destructible_v<T>, "LockFreeDeque<T> expects T to be trivially destructible");
 
   private:
     struct Buffer

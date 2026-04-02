@@ -183,7 +183,7 @@ auto Scanner::build(const std::filesystem::path& root) -> DirectoryTree
     tree.directories.push_back(root_node);
     tree.root = root_node.id;
 
-    ThreadPool pool(8, [this](DirectoryId id) { scan_directory(id); });
+    ThreadPool pool([this](DirectoryId id) { scan_directory(id); });
     submit_task = [&pool](DirectoryId id) { pool.submit(id); };
 
     active_tasks.fetch_add(1, std::memory_order_relaxed);

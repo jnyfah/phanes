@@ -155,19 +155,10 @@ Builder
 
 Every worker holds guard while calling tree.files.push_back(file). When the vector runs out of capacity it reallocates — copying every existing FileNode (each containing a std::filesystem::path, a heap-allocated string) while the mutex is held. During that copy, all 8 workers are blocked. Switch tree.files to std::deque<FileNode> in core.ixx — same fix, same reason.
 
-2. Thread count is hardcoded to 8
-
-
-ThreadPool pool(8, ...);
-On a 4-core machine this adds context-switching overhead. On a 32-core machine you're leaving 24 cores idle. For I/O-bound work like filesystem scanning, more threads than cores can help (one thread waits for the kernel while others run). std::thread::hardware_concurrency() adapts to the machine.
-
 3. guard mutex is acquired once per file — high contention
 
 Every file discovered by every worker acquires guard exclusively to push to tree.files. On a directory with 100k files, that's 100k sequential lock acquisitions per worker. The real fix is per-worker local file buffers — each worker accumulates files locally and flushes at the end of each directory scan. Lock acquisitions drop from O(total_files) to O(total_directories). File IDs would be assigned at flush time using next_file_id.fetch_add(batch_size). This is the highest-impact remaining change.
 
-4. Redundant join() in ThreadPool destructor
-
-You switched to std::jthread, which auto-joins in its own destructor. The explicit join() loop in ~ThreadPool() is now redundant — jthread handles it when the workers vector is destroyed. Not a performance issue, just dead code.
 
 5. The hard real ceiling: syscalls
 
