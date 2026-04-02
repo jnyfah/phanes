@@ -99,7 +99,7 @@ class ThreadPool
             // try steal
             if (!task_id.has_value())
             {
-                for (size_t i = 0; i < STEAL_ATTEMPTS && !task_id; ++i)
+                for (size_t i = 0; i < STEAL_ATTEMPTS && !task_id.has_value(); ++i)
                 {
                     task_id = try_steal(self_worker, id, steal_start_counter);
                 }
