@@ -1,21 +1,16 @@
 module;
 
-#include <algorithm>
-#include <atomic>
 #include <condition_variable>
-#include <cstddef>
-#include <deque>
-#include <functional>
 #include <limits>
-#include <memory>
 #include <mutex>
-#include <queue>
-#include <random>
+#include <optional>
 #include <stdexcept>
 #include <thread>
 #include <vector>
 
 module builder:scheduler;
+
+import :deque;
 
 struct Worker
 {
@@ -25,200 +20,160 @@ struct Worker
     Worker(const Worker&) = delete;
     auto operator=(const Worker&) -> Worker& = delete;
 
-    std::thread thread;
-    std::mutex guard;
-    std::deque<std::function<void()>> tasks;
+    std::jthread thread;
+    LockFreeDeque<std::size_t> tasks;
 };
 
 static constexpr size_t NO_WORKER_ID = std::numeric_limits<size_t>::max();
 static thread_local size_t current_worker_id = NO_WORKER_ID;
-static thread_local std::mt19937 rng{std::random_device{}()};
 
+template <typename Handler>
 class ThreadPool
 {
   private:
     std::vector<std::unique_ptr<Worker>> workers;
     std::condition_variable condition;
-    std::mutex global_guard;
+    std::mutex sleep_guard;
 
-    std::queue<std::function<void()>> global_queue;
-
-    std::atomic<bool> is_active{true};
+    std::stop_source pool_stop;
     std::atomic<size_t> idle_workers{0};
     std::atomic<size_t> pending_tasks{0};
 
-    auto try_steal(size_t self) -> std::function<void()>
+    Handler handler;
+
+    auto try_steal(Worker& self_worker, size_t self, size_t& start_counter) -> std::optional<std::size_t>
     {
         const size_t N = workers.size();
         if (N <= 1)
         {
-            return {};
+            return std::nullopt;
         }
 
-        // randomize the ids for the workers we are trying to steal from
-        std::uniform_int_distribution<size_t> dist(0, N - 1);
+        const size_t start = start_counter++ % (N - 1);
 
-        for (size_t attempt = 0; attempt < N; ++attempt)
+        for (size_t k = 0; k < N - 1; ++k)
         {
-            size_t victim_id = dist(rng);
-            if (victim_id == self)
-            {
-                continue;
-            }
-
+            const size_t offset = 1 + ((start + k) % (N - 1));
+            const size_t victim_id = (self + offset) % N;
             auto& victim = *workers[victim_id];
 
-            std::unique_lock lock(victim.guard, std::try_to_lock);
-
-            if (!lock || victim.tasks.empty())
+            auto task_id = victim.tasks.steal_front();
+            if (!task_id.has_value())
             {
                 continue;
             }
 
-            size_t steal_count = std::max<size_t>(1, victim.tasks.size() / 2);
-
-            auto& stealer = *workers[self];
-
-            std::function<void()> task;
-
-            // move from victim to stealers queue
-            for (size_t i = 0; i < steal_count; ++i)
+            size_t steal_count = victim.tasks.size() / 2;
+            for (size_t j = 0; j < steal_count; ++j)
             {
-                auto t = std::move(victim.tasks.back());
-                victim.tasks.pop_back();
-
-                if (i == 0)
+                auto t = victim.tasks.steal_front();
+                if (!t)
                 {
-                    task = std::move(t);
+                    break;
                 }
-                else
-                {
-                    std::lock_guard my_lock(stealer.guard);
-                    stealer.tasks.push_front(std::move(t));
-                }
+                self_worker.tasks.push_back(*t);
             }
-            return task;
+
+            return task_id;
         }
-        return {};
+
+        return std::nullopt;
     }
 
-    void worker_loop(size_t id)
+    void worker_loop(std::stop_token st, size_t id)
     {
         current_worker_id = id;
         constexpr size_t STEAL_ATTEMPTS = 64;
+        Worker& self_worker = *workers[id];
+        size_t steal_start_counter = 0;
 
         while (true)
         {
-            std::function<void()> task;
+            std::optional<std::size_t> task_id;
 
             // Try local
             {
-                auto& w = *workers[id];
-                std::lock_guard lock(w.guard);
-
-                if (!w.tasks.empty())
-                {
-                    task = std::move(w.tasks.front());
-                    w.tasks.pop_front();
-                }
-            }
-
-            // try global
-            if (!task)
-            {
-                std::lock_guard lock(global_guard);
-
-                if (!global_queue.empty())
-                {
-                    task = std::move(global_queue.front());
-                    global_queue.pop();
-                }
+                task_id = self_worker.tasks.pop_back();
             }
 
             // try steal
-            if (!task)
+            if (!task_id.has_value())
             {
-                for (size_t i = 0; i < STEAL_ATTEMPTS && !task; ++i)
+                for (size_t i = 0; i < STEAL_ATTEMPTS && !task_id.has_value(); ++i)
                 {
-                    task = try_steal(id);
-                    if (!task)
-                    {
-                        std::this_thread::yield();
-                    }
+                    task_id = try_steal(self_worker, id, steal_start_counter);
+                }
+
+                if (!task_id.has_value())
+                {
+                    std::this_thread::yield();
                 }
             }
 
             // shutdown
-            if (!task)
+            if (!task_id.has_value())
             {
+                // Keep track of idle threads
                 idle_workers.fetch_add(1, std::memory_order_relaxed);
-
-                std::unique_lock lock(global_guard);
-
-                if (!is_active.load(std::memory_order_relaxed))
                 {
-                    idle_workers.fetch_sub(1, std::memory_order_relaxed);
-                    return;
+                    std::unique_lock lock(sleep_guard);
+                    if (st.stop_requested())
+                    {
+                        // no longer a worker
+                        idle_workers.fetch_sub(1, std::memory_order_relaxed);
+                        return;
+                    }
+
+                    condition.wait(
+                        lock,
+                        [&] { return st.stop_requested() || pending_tasks.load(std::memory_order_relaxed) > 0; });
                 }
-
-                condition.wait(lock,
-                               [&] {
-                                   return !is_active.load(std::memory_order_relaxed) ||
-                                       pending_tasks.load(std::memory_order_relaxed) > 0;
-                               });
-
                 idle_workers.fetch_sub(1, std::memory_order_relaxed);
                 continue;
             }
+
             // EXECUTE
-            task();
+            handler(*task_id);
             pending_tasks.fetch_sub(1, std::memory_order_relaxed);
         }
     }
 
   public:
-    explicit ThreadPool(size_t threads = 8)
+    explicit ThreadPool(Handler hand, size_t threads = std::jthread::hardware_concurrency()) : handler(std::move(hand))
     {
         workers.reserve(threads);
         for (size_t i = 0; i < threads; ++i)
         {
-            const auto& w = workers.emplace_back(std::make_unique<Worker>());
-            w->thread = std::thread(&ThreadPool::worker_loop, this, i);
+            auto& w = workers.emplace_back(std::make_unique<Worker>());
+            w->thread = std::jthread([this, i, st = pool_stop.get_token()] { worker_loop(st, i); });
         }
     }
 
-    void submit(std::function<void()> task)
+    void submit(std::size_t task_id)
     {
         pending_tasks.fetch_add(1, std::memory_order_relaxed);
         if (current_worker_id == NO_WORKER_ID)
         {
-            // add to global queue
+            // external submit: push directly to worker 0 and wake a sleeper
+            if (pool_stop.stop_requested())
             {
-                std::lock_guard lock(global_guard);
-                if (!is_active)
-                {
-                    throw std::runtime_error("ThreadPool stopped");
-                }
-                global_queue.push(std::move(task));
+                throw std::runtime_error("ThreadPool stopped");
             }
+            workers[0]->tasks.push_back(task_id);
             condition.notify_one();
         }
         else
         {
             auto& worker = *workers[current_worker_id];
-            size_t local_size;
+            if (pool_stop.stop_requested())
             {
-                std::lock_guard lock(worker.guard);
-                if (!is_active)
-                {
-                    throw std::runtime_error("ThreadPool stopped");
-                }
-                worker.tasks.push_back(std::move(task));
-                local_size = worker.tasks.size();
+                throw std::runtime_error("ThreadPool stopped");
             }
+            worker.tasks.push_back(task_id);
+            size_t local_size = worker.tasks.size();
 
-            // if this local queue we just added a task to has more than 2 tasks and we also have idle threads wake up
-            // the idle thread
+            // if this local queue we just added a task_id to has more than 2 tasks and we also have idle threads wake
+            // up the idle thread so they can start stealing!!!!!!
             if (local_size > 1 && idle_workers.load(std::memory_order_relaxed) > 0)
             {
                 condition.notify_one();
@@ -228,17 +183,8 @@ class ThreadPool
 
     ~ThreadPool()
     {
-        is_active.store(false);
-
+        pool_stop.request_stop();
         condition.notify_all();
-
-        for (const auto& worker : workers)
-        {
-            if (worker->thread.joinable())
-            {
-                worker->thread.join();
-            }
-        }
     }
 
     ThreadPool(const ThreadPool&) = delete;
@@ -246,7 +192,3 @@ class ThreadPool
     ThreadPool(ThreadPool&&) = delete;
     auto operator=(ThreadPool&&) -> ThreadPool& = delete;
 };
-
-// try stealing multiple times before sleeping
-// Better wake policy:
-// Steal batches.
