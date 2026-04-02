@@ -54,6 +54,11 @@ Acquire across threads: if the load sees a value stored with release, then prior
 
 
 
+thursday 
+
+Concepts
+std::expected
+
 mordern cpp
 Genuine opportunities
 1. std::expected in the parser — this is the biggest one
@@ -97,3 +102,81 @@ The parser std::expected refactor is the one I'd do first — it changes the des
 emory allocator — slab allocator or jemalloc-style. Directly extends your cache-line alignment and atomics work. You understand alignas(64) — now understand mmap, brk, fragmentation, and thread-local caches.
 Simple kernel — OSDev (osdev.org). Boot, protected mode, paging tables, interrupt handlers, your own context switcher. This is where the OS scheduler you've been reasoning about actually lives.
 Write-ahead log — how databases survive crashes. fsync semantics, mmap vs write, memory-mapped files, crash consistency.
+
+
+
+nalyzer — several real opportunities:
+
+1. compute_directory_stats does 5 separate passes over non_root
+Currently: max_depth pass → max_file_count pass → max_file_size pass → depth fold_left → file_count fold_left. All five iterate the same data. One pass does all of it:
+
+
+for (DirectoryId id : non_root)
+{
+    // update all five accumulators simultaneously
+}
+2. non_root vector allocation is unnecessary
+compute_directory_stats allocates a whole vector just to exclude the root id. A filter view avoids it:
+
+
+auto non_root = std::views::iota(DirectoryId{0}, n)
+              | std::views::filter([root](DirectoryId id){ return id != root; });
+3. compute_summary copies the entire FileNode for the largest file
+
+std::optional<FileNode> largest_file = std::nullopt; // copies FileNode on each update
+Store a FileId instead and look up the node at the end.
+
+4. Multiple actions each do a full pass over tree.files independently
+If the user passes --summary --extensions --recent --symlinks, that's 4 separate iterations over tree.files. For a machine with millions of files this is visible. A single combined pass inside the executor (computing all requested results together) would be more cache-friendly. This is a bigger refactor but the most impactful one for large trees.
+
+5. compute_extension_stats — std::flat_map over unordered_map
+You're building an unordered_map then sorting at the end. std::flat_map (C++23) is a sorted contiguous structure — better cache behaviour for iteration-heavy workloads, and the final sort is avoided since insertion keeps it ordered. Fits this use case naturally.
+
+Priority
+Change	Effort	Impact
+Single pass in compute_directory_stats	Low	Medium
+non_root filter view	Trivial	Low
+largest_file → FileId	Trivial	Low
+Combined multi-action pass over tree.files	Medium	High (for large trees)
+flat_map for extensions	Low	Low-medium
+The combined multi-action pass is the architectural one worth thinking about — everything else is cleanup.
+
+
+
+
+
+
+
+Builder
+
+ few real things remain.
+
+1. tree.files is still std::vector — same reallocation problem directories had
+
+Every worker holds guard while calling tree.files.push_back(file). When the vector runs out of capacity it reallocates — copying every existing FileNode (each containing a std::filesystem::path, a heap-allocated string) while the mutex is held. During that copy, all 8 workers are blocked. Switch tree.files to std::deque<FileNode> in core.ixx — same fix, same reason.
+
+2. Thread count is hardcoded to 8
+
+
+ThreadPool pool(8, ...);
+On a 4-core machine this adds context-switching overhead. On a 32-core machine you're leaving 24 cores idle. For I/O-bound work like filesystem scanning, more threads than cores can help (one thread waits for the kernel while others run). std::thread::hardware_concurrency() adapts to the machine.
+
+3. guard mutex is acquired once per file — high contention
+
+Every file discovered by every worker acquires guard exclusively to push to tree.files. On a directory with 100k files, that's 100k sequential lock acquisitions per worker. The real fix is per-worker local file buffers — each worker accumulates files locally and flushes at the end of each directory scan. Lock acquisitions drop from O(total_files) to O(total_directories). File IDs would be assigned at flush time using next_file_id.fetch_add(batch_size). This is the highest-impact remaining change.
+
+4. Redundant join() in ThreadPool destructor
+
+You switched to std::jthread, which auto-joins in its own destructor. The explicit join() loop in ~ThreadPool() is now redundant — jthread handles it when the workers vector is destroyed. Not a performance issue, just dead code.
+
+5. The hard real ceiling: syscalls
+
+symlink_status, file_size, last_write_time — each is a stat() syscall per file. On Linux these are not cached from the readdir call. With 1M files you're doing 3M syscalls. There's nothing in the C++ layer you can do about this — it's the OS. On fast NVMe this is tolerable; on HDD it's the dominant cost regardless of how optimised the rest is.
+
+Priority:
+
+Change	Impact	Effort
+tree.files → std::deque	Medium — eliminates worst-case lock hold	Trivial
+Per-worker local file buffers	High — eliminates most guard contention	Medium
+hardware_concurrency()	Medium — correct on all machines	Trivial
+Remove redundant join()	Cleanup	Trivial

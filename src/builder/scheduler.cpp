@@ -20,7 +20,7 @@ struct Worker
     Worker(const Worker&) = delete;
     auto operator=(const Worker&) -> Worker& = delete;
 
-    std::thread thread;
+    std::jthread thread;
     LockFreeDeque<std::size_t> tasks;
 };
 
@@ -35,7 +35,7 @@ class ThreadPool
     std::condition_variable condition;
     std::mutex sleep_guard;
 
-    std::atomic<bool> is_active{true};
+    std::stop_source pool_stop;
     std::atomic<size_t> idle_workers{0};
     std::atomic<size_t> pending_tasks{0};
 
@@ -80,7 +80,7 @@ class ThreadPool
         return std::nullopt;
     }
 
-    void worker_loop(size_t id)
+    void worker_loop(std::stop_token st, size_t id)
     {
         current_worker_id = id;
         constexpr size_t STEAL_ATTEMPTS = 64;
@@ -117,18 +117,16 @@ class ThreadPool
                 idle_workers.fetch_add(1, std::memory_order_relaxed);
                 {
                     std::unique_lock lock(sleep_guard);
-                    if (!is_active.load(std::memory_order_relaxed))
+                    if (st.stop_requested())
                     {
                         // no longer a worker
                         idle_workers.fetch_sub(1, std::memory_order_relaxed);
                         return;
                     }
 
-                    condition.wait(lock,
-                                   [&] {
-                                       return !is_active.load(std::memory_order_relaxed) ||
-                                           pending_tasks.load(std::memory_order_relaxed) > 0;
-                                   });
+                    condition.wait(
+                        lock,
+                        [&] { return st.stop_requested() || pending_tasks.load(std::memory_order_relaxed) > 0; });
                 }
                 idle_workers.fetch_sub(1, std::memory_order_relaxed);
                 continue;
@@ -147,7 +145,7 @@ class ThreadPool
         for (size_t i = 0; i < threads; ++i)
         {
             auto& w = workers.emplace_back(std::make_unique<Worker>());
-            w->thread = std::thread(&ThreadPool::worker_loop, this, i);
+            w->thread = std::jthread([this, i, st = pool_stop.get_token()] { worker_loop(st, i); });
         }
     }
 
@@ -157,7 +155,7 @@ class ThreadPool
         if (current_worker_id == NO_WORKER_ID)
         {
             // external submit: push directly to worker 0 and wake a sleeper
-            if (!is_active)
+            if (pool_stop.stop_requested())
             {
                 throw std::runtime_error("ThreadPool stopped");
             }
@@ -167,7 +165,7 @@ class ThreadPool
         else
         {
             auto& worker = *workers[current_worker_id];
-            if (!is_active)
+            if (pool_stop.stop_requested())
             {
                 throw std::runtime_error("ThreadPool stopped");
             }
@@ -185,17 +183,8 @@ class ThreadPool
 
     ~ThreadPool()
     {
-        is_active.store(false);
-
+        pool_stop.request_stop();
         condition.notify_all();
-
-        for (const auto& worker : workers)
-        {
-            if (worker->thread.joinable())
-            {
-                worker->thread.join();
-            }
-        }
     }
 
     ThreadPool(const ThreadPool&) = delete;
