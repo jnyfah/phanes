@@ -1,7 +1,9 @@
 module;
 
+#include <future>
 #include <optional>
 #include <ostream>
+#include <sstream>
 #include <vector>
 
 export module executor;
@@ -48,35 +50,100 @@ export struct Executor
         return *file_stats;
     }
 
-    void operator()(SummaryAction) const
+    // Populate all caches single-threaded before spawning async tasks.
+    // The mutable optionals are not thread-safe to write concurrently.
+    void prewarm() const
     {
-        print_summary(os, compute_summary(tree, get_metrics(), get_empty_dir().size(), get_file_stats()), tree);
+        get_metrics();
+        get_empty_dir();
+        get_file_stats();
     }
 
-    void operator()(ExtensionsAction) const { print_extension_stats(os, compute_extension_stats(tree)); }
-
-    void operator()(EmptyDirsAction) const { print_empty_directories(os, get_empty_dir(), tree); }
-
-    void operator()(SymlinksAction) const { print_symlinks(os, get_file_stats().symlink_ids, tree); }
-
-    void operator()(LargestFilesAction op) const { print_largest_files(os, compute_largest_N_Files(tree, op.n), tree); }
-
-    void operator()(LargestDirsAction op) const
+    std::string operator()(SummaryAction) const
     {
-        print_largest_directories(os, compute_largest_N_Directories(tree, get_metrics(), op.n), tree);
+        std::ostringstream out;
+        print_summary(out, compute_summary(tree, get_metrics(), get_empty_dir().size(), get_file_stats()), tree);
+        return out.str();
     }
 
-    void operator()(RecentAction op) const
+    std::string operator()(ExtensionsAction) const
     {
-        print_recent_files(os, compute_recent_files(tree, op.duration), op.duration, tree);
+        std::ostringstream out;
+        print_extension_stats(out, compute_extension_stats(tree));
+        return out.str();
     }
 
-    void operator()(ErrorsAction) const { print_errors(os, get_errors(tree)); }
-
-    void operator()(StatsAction) const
+    std::string operator()(EmptyDirsAction) const
     {
-        print_directory_stats(os, compute_directory_stats(tree, get_metrics()), tree);
+        std::ostringstream out;
+        print_empty_directories(out, get_empty_dir(), tree);
+        return out.str();
     }
 
-    void operator()(MetricsAction) const { print_directory_metrics(os, get_metrics(), tree); }
+    std::string operator()(SymlinksAction) const
+    {
+        std::ostringstream out;
+        print_symlinks(out, get_file_stats().symlink_ids, tree);
+        return out.str();
+    }
+
+    std::string operator()(LargestFilesAction op) const
+    {
+        std::ostringstream out;
+        print_largest_files(out, compute_largest_N_Files(tree, op.n), tree);
+        return out.str();
+    }
+
+    std::string operator()(LargestDirsAction op) const
+    {
+        std::ostringstream out;
+        print_largest_directories(out, compute_largest_N_Directories(tree, get_metrics(), op.n), tree);
+        return out.str();
+    }
+
+    std::string operator()(RecentAction op) const
+    {
+        std::ostringstream out;
+        print_recent_files(out, compute_recent_files(tree, op.duration), op.duration, tree);
+        return out.str();
+    }
+
+    std::string operator()(ErrorsAction) const
+    {
+        std::ostringstream out;
+        print_errors(out, get_errors(tree));
+        return out.str();
+    }
+
+    std::string operator()(StatsAction) const
+    {
+        std::ostringstream out;
+        print_directory_stats(out, compute_directory_stats(tree, get_metrics()), tree);
+        return out.str();
+    }
+
+    std::string operator()(MetricsAction) const
+    {
+        std::ostringstream out;
+        print_directory_metrics(out, get_metrics(), tree);
+        return out.str();
+    }
+
+    void run(const std::vector<Action>& actions) const
+    {
+        prewarm();
+
+        std::vector<std::future<std::string>> futures;
+        futures.reserve(actions.size());
+
+        for (const auto& action : actions)
+        {
+            futures.push_back(std::async(std::launch::async, [this, action] { return std::visit(*this, action); }));
+        }
+
+        for (auto& f : futures)
+        {
+            os << f.get();
+        }
+    }
 };

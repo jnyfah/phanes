@@ -50,7 +50,7 @@ export struct StatsAction
 {
 };
 
-using Action = std::variant<SummaryAction,
+export using Action = std::variant<SummaryAction,
                             ExtensionsAction,
                             EmptyDirsAction,
                             SymlinksAction,

@@ -15,8 +15,6 @@ benchmark
 
 
 
-* introduce jthread
-
 false sharing
 
 
@@ -25,10 +23,7 @@ Acquire across threads: if the load sees a value stored with release, then prior
 
 
 
-thursday 
-
 flatmap
-std::print
 
 5. std::flat_map for extension stats
 compute_extension_stats builds an unordered_map then sorts at the end. Since you always end up with a sorted output, std::flat_map (C++23) — which is a sorted, contiguous key-value structure — fits better and has better cache behaviour.
@@ -46,9 +41,46 @@ Looking at main.cpp:43-46:
 
 for (const auto& action : result.actions)
     std::visit(executor, action);
-Actions run sequentially. But compute_extension_stats, compute_recent_files, and compute_largest_N_Files are completely independent — they only read tree. If a user runs --extensions --recent 7d --largest-files 10, that's three full O(N) passes over all files done one after another.
 
-These could be launched with std::async in parallel, results collected into a vector in submission order, then printed sequentially. The Executor's cached state (file_stats, metrics, empty_dirs) would need to be pre-warmed before spawning, since those use mutable optional which isn't thread-safe. But the heavy compute functions themselves only take const DirectoryTree& — safe to run concurrently.
+Actions run sequentially. But compute_extension_stats, compute_recent_files,
+ and compute_largest_N_Files are completely independent — they only read tree. 
+ If a user runs --extensions --recent 7d --largest-files 10, that's three full O(N) passes over all 
+ files done one after another.
+
+These could be launched with std::async in parallel, results collected into a vector in submission order
+, then printed sequentially. The Executor's cached state (file_stats, metrics, empty_dirs) 
+would need to be pre-warmed before spawning, since those use mutable optional which isn't thread-safe.
+ But the heavy compute functions themselves only take const DirectoryTree& — safe to run concurrently.
 
 That's the most interesting remaining optimization and it's cross-platform.
+
+
+Parser tests (pure unit tests — easiest to start)
+The parser is fully std::expected-based with no I/O side effects, making it ideal for unit testing:
+
+parse(["path", "--summary"]) → returns correct actions
+parse_positive_size("0", "--largest-files") → returns error
+parse(["path", "--recent", "abc"]) → error, not crash
+parse(["path", "--largest-files"]) → missing value error
+parse(["path", "--recent", "2h"]) → RecentAction{7200s}
+Unknown flags → collected and returned as errors
+Analyzer tests (unit tests with synthetic trees)
+Build a DirectoryTree by hand in the test, then verify analyzer output:
+
+compute_empty_directories on a tree with known empty dirs
+compute_largest_N_Files with N > file count, N = 0, N exactly matching
+compute_file_stats total size, symlink count
+compute_directory_metrics depth propagation, recursive size rollup
+compute_recent_files with mocked timestamps
+Integration / golden output tests
+Run the built binary against a known fixture directory tree, capture stdout, diff against a committed expected output file. Good for catching regressions in view.cpp formatting.
+
+Builder tests (tricky but possible)
+Test build_tree against real temp directories created in the test setup:
+
+Empty directory → tree with 1 dir, 0 files
+Nested structure → correct parent/child relationships
+Symlink handling → is_symlink = true, not counted in size
+Unreadable directory → ends up in tree.errors
+Recommended starting point: parser unit tests — zero filesystem dependency, pure input/output, and the std::expected return type makes assertions very clean. A framework like Catch2 or doctest integrates easily with CMake's CTest.
 

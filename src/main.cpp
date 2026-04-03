@@ -43,10 +43,7 @@ auto main(int argc, char* argv[]) -> int
 
     const Executor executor{tree, std::cout};
 
-    for (const auto& action : result->actions)
-    {
-        std::visit(executor, action);
-    }
+    executor.run(result->actions);
 
     return 0;
 }
