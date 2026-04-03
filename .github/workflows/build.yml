@@ -33,12 +33,15 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang-19 lld-19
+          sudo apt-get install -y clang-19 clang-tools-19 lld-19
 
-      - name: Show compiler
+      - name: Show compiler tools
         if: runner.os == 'Linux'
         run: |
+          clang-19 --version
           clang++-19 --version
+          clang-scan-deps-19 --version
+          which clang-scan-deps-19
 
       - name: Configure
         run: cmake --preset ${{ matrix.preset }}
