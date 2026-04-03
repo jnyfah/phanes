@@ -55,7 +55,7 @@ export struct Executor
 
     void operator()(ExtensionsAction) const { print_extension_stats(os, compute_extension_stats(tree)); }
 
-    void operator()(EmptyDirsAction) const { print_empty_directories(os, compute_empty_directories(tree), tree); }
+    void operator()(EmptyDirsAction) const { print_empty_directories(os, get_empty_dir(), tree); }
 
     void operator()(SymlinksAction) const { print_symlinks(os, get_file_stats().symlink_ids, tree); }
 
@@ -78,5 +78,5 @@ export struct Executor
         print_directory_stats(os, compute_directory_stats(tree, get_metrics()), tree);
     }
 
-    void operator()(MetricsAction) const { print_directory_metrics(os, compute_directory_metrics(tree), tree); }
+    void operator()(MetricsAction) const { print_directory_metrics(os, get_metrics(), tree); }
 };

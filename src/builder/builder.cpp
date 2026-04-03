@@ -36,6 +36,7 @@ void Scanner::scan_directory(DirectoryId id)
     }();
 
     // this variables will be local to each thread
+    std::vector<DirectoryNode> local_dirs;
     std::vector<FileNode> local_files;
     std::vector<ErrorRecord> local_errors;
 
@@ -70,16 +71,7 @@ void Scanner::scan_directory(DirectoryId id)
             DirectoryNode directory{};
             directory.parent = id;
             directory.path = entry.path();
-            DirectoryId dirId;
-            {
-                std::unique_lock lock(dir_mutex);
-                dirId = next_dir_id.fetch_add(1, std::memory_order_relaxed);
-                directory.id = dirId;
-                tree.directories.push_back(std::move(directory));
-                tree.directories[id].subdirs.push_back(dirId);
-            }
-            active_tasks.fetch_add(1, std::memory_order_relaxed);
-            submit_task(dirId);
+            local_dirs.push_back(std::move(directory));
             break;
         }
         case std::filesystem::file_type::regular:
@@ -126,6 +118,29 @@ void Scanner::scan_directory(DirectoryId id)
         }
         default:
             continue;
+        }
+    }
+
+    // flush all subdir, one lock acquisition per directory scan
+    if (!local_dirs.empty())
+    {
+        active_tasks.fetch_add(local_dirs.size(), std::memory_order_relaxed);
+        std::vector<DirectoryId> new_dir_ids;
+        new_dir_ids.reserve(local_dirs.size());
+        {
+            std::unique_lock lock(dir_mutex);
+            for (auto& dir : local_dirs)
+            {
+                DirectoryId dirId = next_dir_id.fetch_add(1, std::memory_order_relaxed);
+                dir.id = dirId;
+                new_dir_ids.push_back(dirId);
+                tree.directories.push_back(std::move(dir));
+                tree.directories[id].subdirs.push_back(dirId);
+            }
+        }
+        for (DirectoryId dirId : new_dir_ids)
+        {
+            submit_task(dirId);
         }
     }
 

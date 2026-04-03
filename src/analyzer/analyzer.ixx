@@ -81,8 +81,6 @@ export std::vector<FileId> compute_recent_files(const DirectoryTree& tree, std::
 
 export std::vector<DirectoryId> compute_empty_directories(const DirectoryTree& tree);
 
-export std::vector<FileId> compute_symlinks(const DirectoryTree& tree);
-
 export DirectoryStats compute_directory_stats(const DirectoryTree& tree, const DirectoryMetrics& metrics);
 
 export DirectoryMetrics compute_directory_metrics(const DirectoryTree& tree);

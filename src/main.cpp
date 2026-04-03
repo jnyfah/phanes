@@ -10,6 +10,9 @@ import executor;
 
 auto main(int argc, char* argv[]) -> int
 {
+    std::ios::sync_with_stdio(false);
+    std::cout.tie(nullptr);
+
     const std::span args(argv + 1, static_cast<std::size_t>(argc - 1));
 
     if (args.empty())

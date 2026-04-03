@@ -5,7 +5,7 @@ module;
 #include <chrono>
 #include <cstddef>
 #include <deque>
-#include <map>
+#include <unordered_map>
 #include <numeric>
 #include <ranges>
 #include <vector>
@@ -85,7 +85,7 @@ std::vector<ExtensionStats> compute_extension_stats(const DirectoryTree& tree)
         return {};
     }
 
-    std::map<std::string, std::pair<std::size_t, std::uintmax_t>> map;
+    std::unordered_map<std::string, std::pair<std::size_t, std::uintmax_t>> map;
 
     for (const auto& file : tree.files)
     {
@@ -177,20 +177,6 @@ std::vector<DirectoryId> compute_empty_directories(const DirectoryTree& tree)
     }
 
     return dirid;
-}
-
-std::vector<FileId> compute_symlinks(const DirectoryTree& tree)
-{
-    std::vector<FileId> symid;
-
-    for (const auto& file : tree.files)
-    {
-        if (file.is_symlink)
-        {
-            symid.push_back(file.id);
-        }
-    }
-    return symid;
 }
 
 const std::deque<ErrorRecord>& get_errors(const DirectoryTree& tree)

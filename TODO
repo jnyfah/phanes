@@ -58,6 +58,8 @@ thursday
 
 Concepts
 std::expected
+flatmap
+std::print
 
 mordern cpp
 Genuine opportunities
@@ -74,10 +76,6 @@ compute_recent_files, compute_symlinks, compute_empty_directories are all filter
 5. std::flat_map for extension stats
 compute_extension_stats builds an unordered_map then sorts at the end. Since you always end up with a sorted output, std::flat_map (C++23) — which is a sorted, contiguous key-value structure — fits better and has better cache behaviour.
 
-What probably doesn't fit
-Coroutines / std::async: Your work-stealing scheduler is strictly better than std::async for this use case — you have a warm thread pool, balanced load, and no per-task thread overhead. Coroutines would add complexity without throughput gains since the bottleneck is filesystem I/O, not scheduling overhead. The learning you did on lock-free structures is the right tool here.
-std::mdspan: No multi-dimensional data here.
-
 Summary
 Feature	Where	Value
 std::expected	parser	High — replaces error-flag + side-effects pattern
@@ -89,44 +87,22 @@ The parser std::expected refactor is the one I'd do first — it changes the des
 
 
 
-emory allocator — slab allocator or jemalloc-style. Directly extends your cache-line alignment and atomics work. You understand alignas(64) — now understand mmap, brk, fragmentation, and thread-local caches.
-Simple kernel — OSDev (osdev.org). Boot, protected mode, paging tables, interrupt handlers, your own context switcher. This is where the OS scheduler you've been reasoning about actually lives.
-Write-ahead log — how databases survive crashes. fsync semantics, mmap vs write, memory-mapped files, crash consistency.
 
 
-
-nalyzer — several real opportunities:
-
-1. compute_directory_stats does 5 separate passes over non_root
-Currently: max_depth pass → max_file_count pass → max_file_size pass → depth fold_left → file_count fold_left. All five iterate the same data. One pass does all of it:
+unning actions in parallel — yes, this is real
+Looking at main.cpp:43-46:
 
 
-for (DirectoryId id : non_root)
-{
-    // update all five accumulators simultaneously
-}
-2. non_root vector allocation is unnecessary
-compute_directory_stats allocates a whole vector just to exclude the root id. A filter view avoids it:
+for (const auto& action : result.actions)
+    std::visit(executor, action);
+Actions run sequentially. But compute_extension_stats, compute_recent_files, and compute_largest_N_Files are completely independent — they only read tree. If a user runs --extensions --recent 7d --largest-files 10, that's three full O(N) passes over all files done one after another.
+
+These could be launched with std::async in parallel, results collected into a vector in submission order, then printed sequentially. The Executor's cached state (file_stats, metrics, empty_dirs) would need to be pre-warmed before spawning, since those use mutable optional which isn't thread-safe. But the heavy compute functions themselves only take const DirectoryTree& — safe to run concurrently.
+
+That's the most interesting remaining optimization and it's cross-platform.
 
 
-auto non_root = std::views::iota(DirectoryId{0}, n)
-              | std::views::filter([root](DirectoryId id){ return id != root; });
-3. compute_summary copies the entire FileNode for the largest file
+Analyzer — two real ones
+1. compute_largest_N_Files over-allocates (analyzer.cpp:65-68) — it allocates a vector of all file IDs, then partial_sorts. For --largest-files 10 on a million files, you allocate 8MB of IDs just to keep 10. A std::priority_queue min-heap of size N keeps only N elements in memory — same O(M log N) complexity, O(N) space instead of O(M).
 
-std::optional<FileNode> largest_file = std::nullopt; // copies FileNode on each update
-Store a FileId instead and look up the node at the end.
-
-4. Multiple actions each do a full pass over tree.files independently
-If the user passes --summary --extensions --recent --symlinks, that's 4 separate iterations over tree.files. For a machine with millions of files this is visible. A single combined pass inside the executor (computing all requested results together) would be more cache-friendly. This is a bigger refactor but the most impactful one for large trees.
-
-5. compute_extension_stats — std::flat_map over unordered_map
-You're building an unordered_map then sorting at the end. std::flat_map (C++23) is a sorted contiguous structure — better cache behaviour for iteration-heavy workloads, and the final sort is avoided since insertion keeps it ordered. Fits this use case naturally.
-
-Priority
-Change	Effort	Impact
-Single pass in compute_directory_stats	Low	Medium
-non_root filter view	Trivial	Low
-largest_file → FileId	Trivial	Low
-Combined multi-action pass over tree.files	Medium	High (for large trees)
-flat_map for extensions	Low	Low-medium
-The combined multi-action pass is the architectural one worth thinking about — everything else is cleanup.
+2. compute_recent_files over-reserves (analyzer.cpp:144) — reserve(tree.files.size()) pre-allocates for the entire file list. If only 100 of 1M files match the cutoff, you allocate 8MB to store 800 bytes. Just drop the reserve entirely, or use a modest default.
