@@ -29,6 +29,17 @@ jobs:
           cmakeVersion: latestrc
           ninjaVersion: latest
 
+      - name: Install GCC 14
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-14 g++-14
+
+      - name: Show compiler version
+        if: runner.os == 'Linux'
+        run: |
+          g++-14 --version
+
       - name: Configure
         run: cmake --preset ${{ matrix.preset }}
 
