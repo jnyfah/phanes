@@ -16,6 +16,8 @@ jobs:
         include:
           - os: ubuntu-latest
             preset: ninja-release
+            cc: gcc
+            cxx: g++
 
           - os: windows-latest
             preset: msvc-release
