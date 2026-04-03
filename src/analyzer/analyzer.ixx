@@ -2,10 +2,10 @@ module;
 
 #include <chrono>
 #include <cstdint>
+#include <deque>
 #include <optional>
 #include <string>
 #include <vector>
-#include <deque>
 
 export module analyzer;
 
