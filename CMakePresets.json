@@ -3,23 +3,35 @@
 
   "configurePresets": [
     {
-      "name": "ninja-debug",
+      "name": "ninja-base",
       "generator": "Ninja",
-      "binaryDir": "build/ninja-debug",
+      "binaryDir": "build/${presetName}",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "CMAKE_CXX_COMPILER": "clang++",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
       }
     },
     {
+      "name": "ninja-debug",
+      "inherits": "ninja-base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_CXX_COMPILER": "clang++"
+      }
+    },
+    {
       "name": "ninja-release",
-      "generator": "Ninja",
-      "binaryDir": "build/ninja-release",
+      "inherits": "ninja-base",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_CXX_COMPILER": "clang++",
-        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+        "CMAKE_CXX_COMPILER": "clang++"
+      }
+    },
+    {
+      "name": "ninja-release-gcc",
+      "inherits": "ninja-base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_COMPILER": "g++"
       }
     },
     {
@@ -42,6 +54,10 @@
     {
       "name": "ninja-release",
       "configurePreset": "ninja-release"
+    },
+    {
+      "name": "ninja-release-gcc",
+      "configurePreset": "ninja-release-gcc"
     },
     {
       "name": "msvc-debug",

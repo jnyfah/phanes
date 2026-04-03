@@ -15,9 +15,7 @@ jobs:
       matrix:
         include:
           - os: ubuntu-24.04
-            preset: ninja-release
-            cc: gcc
-            cxx: g++
+            preset: ninja-release-gcc
 
           - os: windows-latest
             preset: msvc-release
@@ -32,14 +30,6 @@ jobs:
           ninjaVersion: latest
 
       - name: Configure
-        if: runner.os == 'Linux'
-        env:
-          CC: ${{ matrix.cc }}
-          CXX: ${{ matrix.cxx }}
-        run: cmake --preset ${{ matrix.preset }}
-
-      - name: Configure
-        if: runner.os == 'Windows'
         run: cmake --preset ${{ matrix.preset }}
 
       - name: Build
