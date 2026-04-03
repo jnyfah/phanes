@@ -8,6 +8,7 @@ module;
 #include <optional>
 #include <span>
 #include <string_view>
+#include <variant>
 #include <vector>
 
 export module parser;

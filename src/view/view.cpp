@@ -5,6 +5,7 @@ module;
 #include <cmath>
 #include <deque>
 #include <print>
+#include <ostream>
 
 module view;
 
