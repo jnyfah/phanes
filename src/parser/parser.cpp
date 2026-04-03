@@ -5,7 +5,7 @@ module;
 #include <charconv>
 #include <chrono>
 #include <cstddef>
-#include <optional>
+#include <expected>
 #include <span>
 #include <string_view>
 #include <vector>
@@ -26,7 +26,7 @@ void handle_largest_files(std::vector<Action>& actions,
         errors.emplace_back("Missing number of files for --largest-files");
         return;
     }
-    auto value = parse_positive_size(*str, errors, "--largest-files");
+    auto value = parse_positive_size(*str, "--largest-files");
     if (!value)
     {
         errors.emplace_back("Invalid value for --largest-files");
@@ -46,10 +46,10 @@ void handle_largest_dir(std::vector<Action>& actions,
         return;
     }
 
-    auto value = parse_positive_size(*str, errors, "--largest-dirs");
+    auto value = parse_positive_size(*str, "--largest-dirs");
     if (!value)
     {
-        errors.emplace_back("Invalid value for --largest-dirs");
+        errors.emplace_back(value.error());
         return;
     }
 
@@ -66,9 +66,7 @@ void handle_recent(std::vector<Action>& actions, std::optional<std::string_view>
 
     size_t value{};
     auto [ptr, ec] = std::from_chars(str->data(), str->data() + str->size(), value);
-
-    auto begin = str->data();
-    auto end = begin + str->size();
+    auto end = str->data() + str->size();
 
     // ptr stops where the number ends, anything after is the unit
     if (ptr == end)
@@ -84,30 +82,34 @@ void handle_recent(std::vector<Action>& actions, std::optional<std::string_view>
     }
 
     char unit = *ptr;
-    if (ec == std::errc())
+    if (ec != std::errc())
     {
-        if (value == 0)
-        {
-            errors.emplace_back("Value must be greater than 0 for recently modified");
-            return;
-        }
+        errors.emplace_back("Invalid number for --recent");
+        return;
+    }
+    if (value == 0)
+    {
+        errors.emplace_back("Value must be greater than 0 for recently modified");
+        return;
+    }
 
-        if (std::tolower(unit) == 'h')
-        {
-            actions.emplace_back(RecentAction{std::chrono::hours(value)});
-        }
-        else if (std::tolower(unit) == 'm')
-        {
-            actions.emplace_back(RecentAction{std::chrono::minutes(value)});
-        }
-        else if (std::tolower(unit) == 's')
-        {
-            actions.emplace_back(RecentAction{std::chrono::seconds(value)});
-        }
-        else if (std::tolower(unit) == 'd')
-        {
-            actions.emplace_back(RecentAction{std::chrono::days(value)});
-        }
+    switch (std::tolower(static_cast<unsigned char>(unit)))
+    {
+    case 's':
+        actions.emplace_back(RecentAction{std::chrono::seconds(value)});
+        break;
+    case 'm':
+        actions.emplace_back(RecentAction{std::chrono::minutes(value)});
+        break;
+    case 'h':
+        actions.emplace_back(RecentAction{std::chrono::hours(value)});
+        break;
+    case 'd':
+        actions.emplace_back(RecentAction{std::chrono::days(value)});
+        break;
+    default:
+        errors.emplace_back(std::string("Unknown unit '") + unit + "' for --recent (s/m/h/d)");
+        break;
     }
 }
 
@@ -145,53 +147,41 @@ void handle_stats(std::vector<Action>& actions, std::optional<std::string_view> 
     actions.emplace_back(StatsAction{});
 }
 
-std::optional<size_t>
-parse_positive_size(std::string_view str, std::vector<std::string>& errors, std::string_view flag_name)
+auto parse_positive_size(std::string_view str, std::string_view flag_name) -> std::expected<size_t, std::string>
 {
-
     if (str.empty())
     {
-        std::string msg = "Missing value for ";
-        msg += flag_name;
-        errors.emplace_back(std::move(msg));
-        return std::nullopt;
+        return std::unexpected("Missing value for " + std::string(flag_name));
     }
+
     size_t value{};
     auto [_, ec] = std::from_chars(str.data(), str.data() + str.size(), value);
-    if (ec == std::errc())
+
+    if (ec == std::errc::invalid_argument)
     {
-        if (value == 0)
-        {
-            std::string msg = "Value must be greater than 0 for ";
-            msg += flag_name;
-            errors.emplace_back(std::move(msg));
-            return std::nullopt;
-        }
+        return std::unexpected("Not a number for " + std::string(flag_name));
     }
-    else if (ec == std::errc::invalid_argument)
+    if (ec == std::errc::result_out_of_range)
     {
-        errors.emplace_back("This is not a number.\n");
-        return std::nullopt;
+        return std::unexpected("Value out of range for " + std::string(flag_name));
     }
-    else if (ec == std::errc::result_out_of_range)
+    if (value == 0)
     {
-        std::string msg = "This number is larger than an int for ";
-        msg += flag_name;
-        errors.emplace_back(std::move(msg));
-        return std::nullopt;
+        return std::unexpected("Value must be greater than 0 for " + std::string(flag_name));
     }
+
     return value;
 }
 
-auto parse(std::span<std::string_view> args) -> ParseResult
+auto parse(std::span<std::string_view> args) -> std::expected<ParseResult, std::vector<std::string>>
 {
     ParseResult result{};
+    std::vector<std::string> errors;
 
     if (args.empty())
     {
-        result.errors.push_back("no argument passed");
-        result.success = result.errors.empty();
-        return result;
+        errors.push_back("no argument passed");
+        return std::unexpected(errors);
     }
     result.path = args[0]; // first arg is always the target path
 
@@ -202,7 +192,7 @@ auto parse(std::span<std::string_view> args) -> ParseResult
         auto flag = std::ranges::find(flag_table, token, &FlagSpec::name);
         if (flag == flag_table.end())
         {
-            result.errors.push_back("Unknown option: " + std::string(token));
+            errors.push_back("Unknown option: " + std::string(token));
             ++i;
             continue;
         }
@@ -213,17 +203,20 @@ auto parse(std::span<std::string_view> args) -> ParseResult
             // consume the next token as the flag's value
             if (++i >= args.size())
             {
-                result.errors.emplace_back("Missing value for " + std::string(flag->name));
+                errors.emplace_back("Missing value for " + std::string(flag->name));
                 break;
             }
             value = args[i];
         }
 
-        flag->handler(result.actions, value, result.errors);
+        flag->handler(result.actions, value, errors);
         ++i;
     }
 
-    result.success = result.errors.empty();
+    if (!errors.empty())
+    {
+        return std::unexpected(std::move(errors));
+    }
     return result;
 }
 

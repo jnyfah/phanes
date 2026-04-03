@@ -24,26 +24,26 @@ auto main(int argc, char* argv[]) -> int
     std::vector<std::string_view> input(args.begin(), args.end());
     const auto result = parse(input);
 
-    if (!result.errors.empty())
+    if (!result)
     {
-        for (const auto& err : result.errors)
+        for (const auto& err : result.error())
         {
             std::cerr << "warning: " << err << '\n';
             std::cerr << '\n';
         }
     }
 
-    if (result.actions.empty())
+    if (result->actions.empty())
     {
         print_help(std::cout);
-        return result.errors.empty() ? 0 : 1;
+        return 0;
     }
 
-    const auto tree = build_tree(result.path);
+    const auto tree = build_tree(result->path);
 
     const Executor executor{tree, std::cout};
 
-    for (const auto& action : result.actions)
+    for (const auto& action : result->actions)
     {
         std::visit(executor, action);
     }

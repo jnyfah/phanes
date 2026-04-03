@@ -8,37 +8,8 @@
 
 - doxgyen documentaytion
 
-// do you need to use namespaces ?
-- terminal width fix for files that have large names
-- extensions not formated well
-
--parallel_build_tree using a work-stealing scheduler.
-
 - fix struct alignment
 
-parallel filesystem analysis engine
-
-Step 1 → thread pool
-Step 2 → convert scan to tasks
-Step 3 → make tree thread safe
-Step 4 → work stealing
-Step 5 → coroutine scanner
-Step 6 → sender/receiver pipeline
-
-
-CLI
-  ↓
-parser
-  ↓
-scheduler
-  ↓
-parallel scanner
-  ↓
-metrics
-  ↓
-parallel analyzers
-  ↓
-view
 
 benchmark
 

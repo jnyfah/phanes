@@ -3,11 +3,11 @@ module;
 #include <array>
 #include <chrono>
 #include <cstddef>
+#include <expected>
 #include <filesystem>
 #include <optional>
 #include <span>
 #include <string_view>
-#include <variant>
 #include <vector>
 
 export module parser;
@@ -63,9 +63,7 @@ using Action = std::variant<SummaryAction,
 struct ParseResult
 {
     std::filesystem::path path;
-    bool success = true;
     std::vector<Action> actions;
-    std::vector<std::string> errors;
 };
 
 using Handler = void (*)(std::vector<Action>&, std::optional<std::string_view>, std::vector<std::string>&);
@@ -104,9 +102,7 @@ constexpr std::array<FlagSpec, N> flag_table{
     FlagSpec{"--stats", false, handle_stats, "Show aggregate directory statistics", ""},
 };
 
-export auto parse_positive_size(std::string_view,
-                                std::vector<std::string>& errors,
-                                std::string_view flag_name) -> std::optional<size_t>;
+export auto parse_positive_size(std::string_view str, std::string_view flag_name) -> std::expected<size_t, std::string>;
 
-export auto parse(std::span<std::string_view> args) -> ParseResult;
+export auto parse(std::span<std::string_view> args) -> std::expected<ParseResult, std::vector<std::string>>;
 export void print_help(std::ostream& os);
