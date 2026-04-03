@@ -30,16 +30,10 @@ thursday
 flatmap
 std::print
 
-
-3. std::print / std::println in view.cpp
-You're already using std::format — C++23 std::print is the natural next step. Eliminates the std::cout << std::format(...) pattern entirely.
-
 5. std::flat_map for extension stats
 compute_extension_stats builds an unordered_map then sorts at the end. Since you always end up with a sorted output, std::flat_map (C++23) — which is a sorted, contiguous key-value structure — fits better and has better cache behaviour.
 
-Summary
-std::print	view	Low effort, natural upgrade
-Ranges pipelines	analyzer	Medium — cleaner filter/sort chains
+
 std::flat_map	analyzer extension stats	Low-medium — cache win, fits the usage
 
 
