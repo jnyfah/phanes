@@ -10,11 +10,16 @@
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
       }
     },
+
+    // -------------------------
+    // LOCAL (Clang default)
+    // -------------------------
     {
       "name": "ninja-debug",
       "inherits": "ninja-base",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_C_COMPILER": "clang",
         "CMAKE_CXX_COMPILER": "clang++"
       }
     },
@@ -23,18 +28,42 @@
       "inherits": "ninja-base",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_C_COMPILER": "clang",
         "CMAKE_CXX_COMPILER": "clang++"
       }
     },
+
+    // -------------------------
+    // CI (Clang 19 EXACT)
+    // -------------------------
     {
-      "name": "ninja-release-gcc",
+      "name": "ninja-release-clang19",
       "inherits": "ninja-base",
+      "binaryDir": "build/ninja-release-clang19",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_C_COMPILER": "clang-19",
+        "CMAKE_CXX_COMPILER": "clang++-19"
+      }
+    },
+
+    // -------------------------
+    // OPTIONAL (GCC 14)
+    // -------------------------
+    {
+      "name": "ninja-release-gcc14",
+      "inherits": "ninja-base",
+      "binaryDir": "build/ninja-release-gcc14",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_C_COMPILER": "gcc-14",
         "CMAKE_CXX_COMPILER": "g++-14"
       }
     },
+
+    // -------------------------
+    // WINDOWS (MSVC)
+    // -------------------------
     {
       "name": "msvc-release",
       "generator": "Visual Studio 17 2022",
@@ -57,8 +86,12 @@
       "configurePreset": "ninja-release"
     },
     {
-      "name": "ninja-release-gcc",
-      "configurePreset": "ninja-release-gcc"
+      "name": "ninja-release-clang19",
+      "configurePreset": "ninja-release-clang19"
+    },
+    {
+      "name": "ninja-release-gcc14",
+      "configurePreset": "ninja-release-gcc14"
     },
     {
       "name": "msvc-debug",
