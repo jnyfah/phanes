@@ -56,7 +56,6 @@ Acquire across threads: if the load sees a value stored with release, then prior
 
 thursday 
 
-Concepts
 std::expected
 flatmap
 std::print
@@ -64,7 +63,10 @@ std::print
 mordern cpp
 Genuine opportunities
 1. std::expected in the parser — this is the biggest one
-ParseResult has a success bool + errors vector — that's exactly what std::expected was designed to replace. The individual handlers like parse_positive_size could return std::expected<size_t, std::string> instead of returning 0 and side-effecting into an error list. Cleaner call sites, no implicit sentinel values.
+ParseResult has a success bool + errors vector — that's exactly what std::expected was designed to replace.
+ The individual handlers like parse_positive_size could return std::expected<size_t, std::string> 
+ instead of returning 0 and side-effecting into an error list. 
+ Cleaner call sites, no implicit sentinel values.
 
 
 3. std::print / std::println in view.cpp
@@ -101,8 +103,3 @@ These could be launched with std::async in parallel, results collected into a ve
 
 That's the most interesting remaining optimization and it's cross-platform.
 
-
-Analyzer — two real ones
-1. compute_largest_N_Files over-allocates (analyzer.cpp:65-68) — it allocates a vector of all file IDs, then partial_sorts. For --largest-files 10 on a million files, you allocate 8MB of IDs just to keep 10. A std::priority_queue min-heap of size N keeps only N elements in memory — same O(M log N) complexity, O(N) space instead of O(M).
-
-2. compute_recent_files over-reserves (analyzer.cpp:144) — reserve(tree.files.size()) pre-allocates for the entire file list. If only 100 of 1M files match the cutoff, you allocate 8MB to store 800 bytes. Just drop the reserve entirely, or use a modest default.

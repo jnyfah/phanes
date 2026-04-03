@@ -5,9 +5,10 @@ module;
 #include <chrono>
 #include <cstddef>
 #include <deque>
-#include <unordered_map>
 #include <numeric>
+#include <queue>
 #include <ranges>
+#include <unordered_map>
 #include <vector>
 
 module analyzer;
@@ -62,20 +63,30 @@ std::vector<FileId> compute_largest_N_Files(const DirectoryTree& tree, std::size
         return {};
     }
 
-    std::vector<FileId> fileId;
     N = std::min(N, tree.files.size());
 
-    fileId.resize(tree.files.size());
-    std::ranges::iota(fileId.begin(), fileId.end(), 0);
+    auto cmp = [&tree](FileId a, FileId b) { return tree.files[a].size > tree.files[b].size; };
+    std::priority_queue<FileId, std::vector<FileId>, decltype(cmp)> heap(cmp);
 
-    std::ranges::partial_sort(fileId,
-                              fileId.begin() + N,
-                              [&tree](const FileId& a, const FileId& b)
-                              { return tree.files[a].size > tree.files[b].size; });
+    for (FileId id = 0; id < tree.files.size(); ++id)
+    {
+        heap.push(id);
+        if (heap.size() > N)
+        {
+            heap.pop();
+        }
+    }
 
-    fileId.resize(N);
+    std::vector<FileId> result;
+    result.reserve(heap.size());
+    while (!heap.empty())
+    {
+        result.push_back(heap.top());
+        heap.pop();
+    }
 
-    return fileId;
+    std::ranges::reverse(result);
+    return result;
 }
 
 std::vector<ExtensionStats> compute_extension_stats(const DirectoryTree& tree)
@@ -141,7 +152,6 @@ std::vector<FileId> compute_recent_files(const DirectoryTree& tree, std::chrono:
     }
 
     std::vector<FileId> fileid;
-    fileid.reserve(tree.files.size());
 
     auto now = std::chrono::floor<std::chrono::seconds>(std::chrono::system_clock::now());
     auto cutoff = now - duration;
