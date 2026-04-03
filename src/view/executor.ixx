@@ -4,6 +4,7 @@ module;
 #include <optional>
 #include <ostream>
 #include <sstream>
+#include <variant>
 #include <vector>
 
 export module executor;

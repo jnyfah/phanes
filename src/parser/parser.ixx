@@ -51,15 +51,15 @@ export struct StatsAction
 };
 
 export using Action = std::variant<SummaryAction,
-                            ExtensionsAction,
-                            EmptyDirsAction,
-                            SymlinksAction,
-                            ErrorsAction,
-                            LargestFilesAction,
-                            LargestDirsAction,
-                            RecentAction,
-                            MetricsAction,
-                            StatsAction>;
+                                   ExtensionsAction,
+                                   EmptyDirsAction,
+                                   SymlinksAction,
+                                   ErrorsAction,
+                                   LargestFilesAction,
+                                   LargestDirsAction,
+                                   RecentAction,
+                                   MetricsAction,
+                                   StatsAction>;
 
 struct ParseResult
 {

@@ -30,6 +30,14 @@ jobs:
           ninjaVersion: latest
 
       - name: Configure
+        if: runner.os == 'Linux'
+        env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
+        run: cmake --preset ${{ matrix.preset }}
+
+      - name: Configure
+        if: runner.os == 'Windows'
         run: cmake --preset ${{ matrix.preset }}
 
       - name: Build
