@@ -4,8 +4,8 @@ module;
 #include <chrono>
 #include <cmath>
 #include <deque>
-#include <print>
 #include <ostream>
+#include <print>
 
 module view;
 
