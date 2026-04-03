@@ -75,10 +75,7 @@ void Scanner::scan_directory(DirectoryId id)
                 std::unique_lock lock(dir_mutex);
                 dirId = next_dir_id.fetch_add(1, std::memory_order_relaxed);
                 directory.id = dirId;
-                tree.directories.push_back(directory);
-            }
-            {
-                std::shared_lock lock(dir_mutex);
+                tree.directories.push_back(std::move(directory));
                 tree.directories[id].subdirs.push_back(dirId);
             }
             active_tasks.fetch_add(1, std::memory_order_relaxed);
