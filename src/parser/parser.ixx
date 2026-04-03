@@ -66,7 +66,7 @@ struct ParseResult
     std::vector<Action> actions;
 };
 
-using Handler = void (*)(std::vector<Action>&, std::optional<std::string_view>, std::vector<std::string>&);
+using Handler = std::expected<Action, std::string> (*)(std::optional<std::string_view>);
 
 struct FlagSpec
 {
@@ -77,16 +77,16 @@ struct FlagSpec
     std::string_view value_hint;
 };
 
-export void handle_summary(std::vector<Action>&, std::optional<std::string_view>, std::vector<std::string>&);
-export void handle_largest_files(std::vector<Action>&, std::optional<std::string_view>, std::vector<std::string>&);
-export void handle_largest_dir(std::vector<Action>&, std::optional<std::string_view>, std::vector<std::string>&);
-export void handle_recent(std::vector<Action>&, std::optional<std::string_view>, std::vector<std::string>&);
-export void handle_extensions(std::vector<Action>&, std::optional<std::string_view>, std::vector<std::string>&);
-export void handle_empty_dir(std::vector<Action>&, std::optional<std::string_view>, std::vector<std::string>&);
-export void handle_symlinks(std::vector<Action>&, std::optional<std::string_view>, std::vector<std::string>&);
-export void handle_errors(std::vector<Action>&, std::optional<std::string_view>, std::vector<std::string>&);
-export void handle_metrics(std::vector<Action>&, std::optional<std::string_view>, std::vector<std::string>&);
-export void handle_stats(std::vector<Action>&, std::optional<std::string_view>, std::vector<std::string>&);
+export auto handle_summary(std::optional<std::string_view>) -> std::expected<Action, std::string>;
+export auto handle_largest_files(std::optional<std::string_view>) -> std::expected<Action, std::string>;
+export auto handle_largest_dir(std::optional<std::string_view>) -> std::expected<Action, std::string>;
+export auto handle_recent(std::optional<std::string_view>) -> std::expected<Action, std::string>;
+export auto handle_extensions(std::optional<std::string_view>) -> std::expected<Action, std::string>;
+export auto handle_empty_dir(std::optional<std::string_view>) -> std::expected<Action, std::string>;
+export auto handle_symlinks(std::optional<std::string_view>) -> std::expected<Action, std::string>;
+export auto handle_errors(std::optional<std::string_view>) -> std::expected<Action, std::string>;
+export auto handle_metrics(std::optional<std::string_view>) -> std::expected<Action, std::string>;
+export auto handle_stats(std::optional<std::string_view>) -> std::expected<Action, std::string>;
 
 constexpr size_t N = 10;
 constexpr std::array<FlagSpec, N> flag_table{

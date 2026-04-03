@@ -12,139 +12,114 @@ module;
 
 module parser;
 
-void handle_summary(std::vector<Action>& actions, std::optional<std::string_view> str, std::vector<std::string>& errors)
+auto handle_summary(std::optional<std::string_view>) -> std::expected<Action, std::string>
 {
-    actions.emplace_back(SummaryAction{});
+    return SummaryAction{};
 }
 
-void handle_largest_files(std::vector<Action>& actions,
-                          std::optional<std::string_view> str,
-                          std::vector<std::string>& errors)
+auto handle_largest_files(std::optional<std::string_view> str) -> std::expected<Action, std::string>
 {
     if (!str)
     {
-        errors.emplace_back("Missing number of files for --largest-files");
-        return;
+        return std::unexpected("Missing value for --largest-files");
     }
     auto value = parse_positive_size(*str, "--largest-files");
+
     if (!value)
     {
-        errors.emplace_back("Invalid value for --largest-files");
-        return;
+        return std::unexpected(value.error());
     }
-
-    actions.emplace_back(LargestFilesAction{*value});
+    return LargestFilesAction{*value};
 }
 
-void handle_largest_dir(std::vector<Action>& actions,
-                        std::optional<std::string_view> str,
-                        std::vector<std::string>& errors)
+auto handle_largest_dir(std::optional<std::string_view> str) -> std::expected<Action, std::string>
 {
     if (!str)
     {
-        errors.emplace_back("Missing number of directories for --largest-dirs");
-        return;
+        return std::unexpected("Missing value for --largest-dirs");
     }
 
     auto value = parse_positive_size(*str, "--largest-dirs");
+
     if (!value)
     {
-        errors.emplace_back(value.error());
-        return;
+        return std::unexpected(value.error());
     }
 
-    actions.emplace_back(LargestDirsAction{*value});
+    return LargestDirsAction{*value};
 }
 
-void handle_recent(std::vector<Action>& actions, std::optional<std::string_view> str, std::vector<std::string>& errors)
+auto handle_recent(std::optional<std::string_view> str) -> std::expected<Action, std::string>
 {
     if (!str)
     {
-        errors.emplace_back("Missing time specification for --recently modified");
-        return;
+        return std::unexpected("Missing time specification for --recent");
     }
 
     size_t value{};
     auto [ptr, ec] = std::from_chars(str->data(), str->data() + str->size(), value);
     auto end = str->data() + str->size();
 
-    // ptr stops where the number ends, anything after is the unit
     if (ptr == end)
     {
-        errors.emplace_back("Missing Unit specifier for recently modified (s/m/h/d)");
-        return;
+        return std::unexpected("Missing unit specifier for --recent (s/m/h/d)");
     }
-
     if (ptr + 1 != end)
     {
-        errors.emplace_back("Unit specifier for recently modified  must be sigle letter (s/m/h/d)");
-        return;
+        return std::unexpected("Unit specifier for --recent must be a single letter (s/m/h/d)");
     }
-
-    char unit = *ptr;
     if (ec != std::errc())
     {
-        errors.emplace_back("Invalid number for --recent");
-        return;
+        return std::unexpected("Invalid number for --recent");
     }
     if (value == 0)
     {
-        errors.emplace_back("Value must be greater than 0 for recently modified");
-        return;
+        return std::unexpected("Value must be greater than 0 for --recent");
     }
 
-    switch (std::tolower(static_cast<unsigned char>(unit)))
+    switch (std::tolower(static_cast<unsigned char>(*ptr)))
     {
     case 's':
-        actions.emplace_back(RecentAction{std::chrono::seconds(value)});
-        break;
+        return RecentAction{std::chrono::seconds(value)};
     case 'm':
-        actions.emplace_back(RecentAction{std::chrono::minutes(value)});
-        break;
+        return RecentAction{std::chrono::minutes(value)};
     case 'h':
-        actions.emplace_back(RecentAction{std::chrono::hours(value)});
-        break;
+        return RecentAction{std::chrono::hours(value)};
     case 'd':
-        actions.emplace_back(RecentAction{std::chrono::days(value)});
-        break;
+        return RecentAction{std::chrono::days(value)};
     default:
-        errors.emplace_back(std::string("Unknown unit '") + unit + "' for --recent (s/m/h/d)");
-        break;
+        return std::unexpected(std::string("Unknown unit '") + *ptr + "' for --recent (s/m/h/d)");
     }
 }
 
-void handle_extensions(std::vector<Action>& actions,
-                       std::optional<std::string_view> str,
-                       std::vector<std::string>& errors)
+auto handle_extensions(std::optional<std::string_view>) -> std::expected<Action, std::string>
 {
-    actions.emplace_back(ExtensionsAction{});
-}
-void handle_empty_dir(std::vector<Action>& actions,
-                      std::optional<std::string_view> str,
-                      std::vector<std::string>& errors)
-{
-    actions.emplace_back(EmptyDirsAction{});
-}
-void handle_symlinks(std::vector<Action>& actions,
-                     std::optional<std::string_view> str,
-                     std::vector<std::string>& errors)
-{
-    actions.emplace_back(SymlinksAction{});
+    return ExtensionsAction{};
 }
 
-void handle_errors(std::vector<Action>& actions, std::optional<std::string_view> str, std::vector<std::string>& errors)
+auto handle_empty_dir(std::optional<std::string_view>) -> std::expected<Action, std::string>
 {
-    actions.emplace_back(ErrorsAction{});
+    return EmptyDirsAction{};
 }
 
-void handle_metrics(std::vector<Action>& actions, std::optional<std::string_view> str, std::vector<std::string>& errors)
+auto handle_symlinks(std::optional<std::string_view>) -> std::expected<Action, std::string>
 {
-    actions.emplace_back(MetricsAction{});
+    return SymlinksAction{};
 }
 
-void handle_stats(std::vector<Action>& actions, std::optional<std::string_view> str, std::vector<std::string>& errors)
+auto handle_errors(std::optional<std::string_view>) -> std::expected<Action, std::string>
 {
-    actions.emplace_back(StatsAction{});
+    return ErrorsAction{};
+}
+
+auto handle_metrics(std::optional<std::string_view>) -> std::expected<Action, std::string>
+{
+    return MetricsAction{};
+}
+
+auto handle_stats(std::optional<std::string_view>) -> std::expected<Action, std::string>
+{
+    return StatsAction{};
 }
 
 auto parse_positive_size(std::string_view str, std::string_view flag_name) -> std::expected<size_t, std::string>
@@ -209,7 +184,15 @@ auto parse(std::span<std::string_view> args) -> std::expected<ParseResult, std::
             value = args[i];
         }
 
-        flag->handler(result.actions, value, errors);
+        if (auto action = flag->handler(value))
+        {
+            result.actions.push_back(std::move(*action));
+        }
+        else
+        {
+            errors.push_back(std::move(action.error()));
+        }
+
         ++i;
     }
 

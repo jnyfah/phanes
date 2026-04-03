@@ -27,17 +27,8 @@ Acquire across threads: if the load sees a value stored with release, then prior
 
 thursday 
 
-std::expected
 flatmap
 std::print
-
-mordern cpp
-Genuine opportunities
-1. std::expected in the parser — this is the biggest one
-ParseResult has a success bool + errors vector — that's exactly what std::expected was designed to replace.
- The individual handlers like parse_positive_size could return std::expected<size_t, std::string> 
- instead of returning 0 and side-effecting into an error list. 
- Cleaner call sites, no implicit sentinel values.
 
 
 3. std::print / std::println in view.cpp
@@ -50,13 +41,9 @@ compute_recent_files, compute_symlinks, compute_empty_directories are all filter
 compute_extension_stats builds an unordered_map then sorts at the end. Since you always end up with a sorted output, std::flat_map (C++23) — which is a sorted, contiguous key-value structure — fits better and has better cache behaviour.
 
 Summary
-Feature	Where	Value
-std::expected	parser	High — replaces error-flag + side-effects pattern
-Concepts	deque, scheduler	Medium — cleaner than static_assert
 std::print	view	Low effort, natural upgrade
 Ranges pipelines	analyzer	Medium — cleaner filter/sort chains
 std::flat_map	analyzer extension stats	Low-medium — cache win, fits the usage
-The parser std::expected refactor is the one I'd do first — it changes the design in a meaningful way. The rest are refinements.
 
 
 
