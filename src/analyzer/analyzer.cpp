@@ -108,14 +108,10 @@ std::vector<ExtensionStats> compute_extension_stats(const DirectoryTree& tree)
         size += file.size;
     }
 
-    std::vector<ExtensionStats> stats;
-    stats.reserve(map.size());
-
-    for (const auto& [ext, values] : map)
-    {
-        const auto& [count, total] = values;
-        stats.push_back(ExtensionStats{ext, count, total});
-    }
+    auto stats = map |
+        std::views::transform([](const auto& kv)
+                              { return ExtensionStats{kv.first, kv.second.first, kv.second.second}; }) |
+        std::ranges::to<std::vector>();
 
     std::ranges::sort(stats,
                       [](const ExtensionStats& a, const ExtensionStats& b) { return a.total_size > b.total_size; });
@@ -146,22 +142,11 @@ compute_largest_N_Directories(const DirectoryTree& tree, const DirectoryMetrics&
 
 std::vector<FileId> compute_recent_files(const DirectoryTree& tree, std::chrono::seconds duration)
 {
-    if (tree.files.empty())
-    {
-        return {};
-    }
-
-    std::vector<FileId> fileid;
-
     auto now = std::chrono::floor<std::chrono::seconds>(std::chrono::system_clock::now());
     auto cutoff = now - duration;
-    for (const auto& file : tree.files)
-    {
-        if (file.modified >= cutoff)
-        {
-            fileid.push_back(file.id);
-        }
-    }
+
+    auto fileid = tree.files | std::views::filter([&](const FileNode& f) { return f.modified >= cutoff; }) |
+        std::views::transform([](const FileNode& f) { return f.id; }) | std::ranges::to<std::vector>();
 
     std::ranges::sort(fileid, [&](FileId a, FileId b) { return tree.files[a].modified > tree.files[b].modified; });
     return fileid;
@@ -169,24 +154,14 @@ std::vector<FileId> compute_recent_files(const DirectoryTree& tree, std::chrono:
 
 std::vector<DirectoryId> compute_empty_directories(const DirectoryTree& tree)
 {
-    if (tree.directories.empty())
-    {
-        return {};
-    }
-
-    std::vector<DirectoryId> dirid;
-
-    for (DirectoryId id = 0; id < tree.directories.size(); ++id)
-    {
-        const auto& dir = tree.directories[id];
-
-        if (dir.files.empty() && dir.subdirs.empty())
-        {
-            dirid.push_back(id);
-        }
-    }
-
-    return dirid;
+    return std::views::iota(DirectoryId{0}, tree.directories.size()) |
+        std::views::filter(
+               [&](DirectoryId id)
+               {
+                   const auto& d = tree.directories[id];
+                   return d.files.empty() && d.subdirs.empty();
+               }) |
+        std::ranges::to<std::vector>();
 }
 
 const std::deque<ErrorRecord>& get_errors(const DirectoryTree& tree)

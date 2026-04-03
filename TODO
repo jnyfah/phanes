@@ -34,9 +34,6 @@ std::print
 3. std::print / std::println in view.cpp
 You're already using std::format — C++23 std::print is the natural next step. Eliminates the std::cout << std::format(...) pattern entirely.
 
-4. Ranges pipelines in analyzer.cpp
-compute_recent_files, compute_symlinks, compute_empty_directories are all filter → sort → return operations on vectors. These map directly to std::ranges::filter_view pipelines. compute_largest_N_files uses std::partial_sort_copy which could become a ranges partial sort. These are already the kind of thing you'd write with ranges naturally.
-
 5. std::flat_map for extension stats
 compute_extension_stats builds an unordered_map then sorts at the end. Since you always end up with a sorted output, std::flat_map (C++23) — which is a sorted, contiguous key-value structure — fits better and has better cache behaviour.
 
