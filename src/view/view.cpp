@@ -3,6 +3,7 @@ module;
 #include <array>
 #include <chrono>
 #include <cmath>
+#include <deque>
 #include <format>
 
 module view;
@@ -91,7 +92,7 @@ std::string format_duration(std::chrono::seconds total)
     return std::string(buffer.data(), ptr);
 }
 
-void print_summary(std::ostream& os, const SummaryReport& report)
+void print_summary(std::ostream& os, const SummaryReport& report, const DirectoryTree& tree)
 {
     os << "Scan Summary\n";
     os << "------------------\n\n";
@@ -106,10 +107,8 @@ void print_summary(std::ostream& os, const SummaryReport& report)
 
     if (report.largest_file)
     {
-        os << std::format("{:<18}: {} ({})\n",
-                          "Largest File",
-                          report.largest_file->path.filename().string(),
-                          format_size(report.largest_file->size));
+        const auto& file = tree.files[*report.largest_file];
+        os << std::format("{:<18}: {} ({})\n", "Largest File", file.path.filename().string(), format_size(file.size));
     }
     else
     {
@@ -255,7 +254,7 @@ void print_extension_stats(std::ostream& os, const std::vector<ExtensionStats>& 
     os << '\n';
 }
 
-void print_errors(std::ostream& os, const std::vector<ErrorRecord>& errors)
+void print_errors(std::ostream& os, const std::deque<ErrorRecord>& errors)
 {
     if (errors.empty())
     {

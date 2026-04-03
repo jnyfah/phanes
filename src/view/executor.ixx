@@ -18,6 +18,7 @@ export struct Executor
 
     mutable std::optional<DirectoryMetrics> metrics;
     mutable std::optional<std::vector<DirectoryId>> empty_dirs;
+    mutable std::optional<FileStats> file_stats;
 
     const DirectoryMetrics& get_metrics() const
     {
@@ -38,16 +39,25 @@ export struct Executor
         return *empty_dirs;
     }
 
+    const FileStats& get_file_stats() const
+    {
+        if (!file_stats)
+        {
+            file_stats = compute_file_stats(tree);
+        }
+        return *file_stats;
+    }
+
     void operator()(SummaryAction) const
     {
-        print_summary(os, compute_summary(tree, get_metrics(), get_empty_dir().size()));
+        print_summary(os, compute_summary(tree, get_metrics(), get_empty_dir().size(), get_file_stats()), tree);
     }
 
     void operator()(ExtensionsAction) const { print_extension_stats(os, compute_extension_stats(tree)); }
 
     void operator()(EmptyDirsAction) const { print_empty_directories(os, compute_empty_directories(tree), tree); }
 
-    void operator()(SymlinksAction) const { print_symlinks(os, compute_symlinks(tree), tree); }
+    void operator()(SymlinksAction) const { print_symlinks(os, get_file_stats().symlink_ids, tree); }
 
     void operator()(LargestFilesAction op) const { print_largest_files(os, compute_largest_N_Files(tree, op.n), tree); }
 
