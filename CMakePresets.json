@@ -10,10 +10,6 @@
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
       }
     },
-
-    // -------------------------
-    // LOCAL (Clang default)
-    // -------------------------
     {
       "name": "ninja-debug",
       "inherits": "ninja-base",
@@ -32,10 +28,6 @@
         "CMAKE_CXX_COMPILER": "clang++"
       }
     },
-
-    // -------------------------
-    // CI (Clang 19 EXACT)
-    // -------------------------
     {
       "name": "ninja-release-clang19",
       "inherits": "ninja-base",
@@ -46,10 +38,6 @@
         "CMAKE_CXX_COMPILER": "clang++-19"
       }
     },
-
-    // -------------------------
-    // OPTIONAL (GCC 14)
-    // -------------------------
     {
       "name": "ninja-release-gcc14",
       "inherits": "ninja-base",
@@ -60,10 +48,6 @@
         "CMAKE_CXX_COMPILER": "g++-14"
       }
     },
-
-    // -------------------------
-    // WINDOWS (MSVC)
-    // -------------------------
     {
       "name": "msvc-release",
       "generator": "Visual Studio 17 2022",
