@@ -96,7 +96,7 @@ void Scanner::scan_directory(DirectoryId id)
             auto ftime = entry.last_write_time(time_ec);
             if (!time_ec)
             {
-                auto sysTime = std::filesystem::file_time_type::clock::to_sys(ftime);
+                auto sysTime = std::chrono::clock_cast<std::chrono::system_clock>(ftime);
                 file.modified = std::chrono::floor<std::chrono::seconds>(sysTime);
             }
 
