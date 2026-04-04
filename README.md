@@ -3,14 +3,14 @@
 [![CMake Build](https://github.com/jnyfah/phanes/actions/workflows/build.yml/badge.svg)](https://github.com/jnyfah/phanes/actions/workflows/build.yml)
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=jnyfah_phanes&metric=alert_status&token=70f44ef44415031cc2a1d2e532ec7a1d88553720)](https://sonarcloud.io/summary/new_code?id=jnyfah_phanes)
 
-Phanes is a fast, multithreaded command-line tool for analyzing filesystem structure. It scans directories in parallel and produces detailed reports on file sizes, types, modification times, symlinks, errors, and directory metrics — all from a single pass.
+Phanes is a fast, multithreaded command-line tool for analyzing filesystem structure. It scans directories in parallel and produces detailed reports on file sizes, types, modification times, symlinks, errors, and directory metrics, all from a single pass.
 
 ---
 
 ## Features
 
 - Parallel directory scanning via a lock-free work-stealing thread pool
-- Concurrent action dispatch — multiple report types computed simultaneously
+- Concurrent action dispatch: multiple report types computed simultaneously
 - benchmark ?????
 
 ---
@@ -21,8 +21,8 @@ Phanes is a fast, multithreaded command-line tool for analyzing filesystem struc
 
 - [CMake](https://cmake.org/) 4.0 or later
 - A C++23-capable compiler:
-  - **Linux / macOS** — Clang 18+ or GCC 13+
-  - **Windows** — MSVC 19.38+ (Visual Studio 2022 17.8+)
+  - **Linux / macOS** -- Clang 18+ or GCC 13+
+  - **Windows** -- MSVC 19.38+ (Visual Studio 2022 17.8+)
 - [Ninja](https://ninja-build.org/) (for the default presets on Linux/macOS)
 
 ### Build
