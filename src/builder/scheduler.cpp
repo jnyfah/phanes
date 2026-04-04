@@ -24,20 +24,20 @@ struct Worker
     LockFreeDeque<std::size_t> tasks;
 };
 
-static constexpr size_t NO_WORKER_ID = std::numeric_limits<size_t>::max();
-static thread_local size_t current_worker_id = NO_WORKER_ID;
-
 template <typename Handler>
 class ThreadPool
 {
   private:
-    std::vector<std::unique_ptr<Worker>> workers;
+    static inline constexpr std::size_t no_worker_id = static_cast<std::size_t>(-1);
+    static inline thread_local std::size_t current_worker_id = no_worker_id;
+
     std::condition_variable condition;
     std::mutex sleep_guard;
 
     std::stop_source pool_stop;
     std::atomic<size_t> idle_workers{0};
     std::atomic<size_t> pending_tasks{0};
+    std::vector<std::unique_ptr<Worker>> workers;
 
     Handler handler;
 
@@ -103,11 +103,6 @@ class ThreadPool
                 {
                     task_id = try_steal(self_worker, id, steal_start_counter);
                 }
-
-                if (!task_id.has_value())
-                {
-                    std::this_thread::yield();
-                }
             }
 
             // shutdown
@@ -152,7 +147,7 @@ class ThreadPool
     void submit(std::size_t task_id)
     {
         pending_tasks.fetch_add(1, std::memory_order_relaxed);
-        if (current_worker_id == NO_WORKER_ID)
+        if (current_worker_id == no_worker_id)
         {
             // external submit: push directly to worker 0 and wake a sleeper
             if (pool_stop.stop_requested())

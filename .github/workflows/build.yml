@@ -14,8 +14,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
-            preset: ninja-release
+          - os: ubuntu-24.04
+            preset: CI-clang19
 
           - os: windows-latest
             preset: msvc-release
@@ -29,11 +29,22 @@ jobs:
           cmakeVersion: latestrc
           ninjaVersion: latest
 
+      - name: Install Clang 19
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-19 clang-tools-19 lld-19
+
+      - name: Show compiler tools
+        if: runner.os == 'Linux'
+        run: |
+          clang-19 --version
+          clang++-19 --version
+          clang-scan-deps-19 --version
+          which clang-scan-deps-19
+
       - name: Configure
         run: cmake --preset ${{ matrix.preset }}
 
       - name: Build
         run: cmake --build --preset ${{ matrix.preset }}
-
-    # - name: Test
-    #   run: ctest --preset ${{ matrix.preset }}

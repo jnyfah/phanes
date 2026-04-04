@@ -63,7 +63,7 @@ export struct DirectoryTree
 
     std::deque<FileNode> files;
     std::deque<DirectoryNode> directories;
-    std::vector<ErrorRecord> errors;
+    std::deque<ErrorRecord> errors;
 
     std::chrono::sys_time<std::chrono::seconds> scan_started;
     std::chrono::sys_time<std::chrono::seconds> scan_finished;

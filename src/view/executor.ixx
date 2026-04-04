@@ -1,7 +1,10 @@
 module;
 
+#include <future>
 #include <optional>
 #include <ostream>
+#include <sstream>
+#include <variant>
 #include <vector>
 
 export module executor;
@@ -18,6 +21,7 @@ export struct Executor
 
     mutable std::optional<DirectoryMetrics> metrics;
     mutable std::optional<std::vector<DirectoryId>> empty_dirs;
+    mutable std::optional<FileStats> file_stats;
 
     const DirectoryMetrics& get_metrics() const
     {
@@ -38,35 +42,116 @@ export struct Executor
         return *empty_dirs;
     }
 
-    void operator()(SummaryAction) const
+    const FileStats& get_file_stats() const
     {
-        print_summary(os, compute_summary(tree, get_metrics(), get_empty_dir().size()));
+        if (!file_stats)
+        {
+            file_stats = compute_file_stats(tree);
+        }
+        return *file_stats;
     }
 
-    void operator()(ExtensionsAction) const { print_extension_stats(os, compute_extension_stats(tree)); }
-
-    void operator()(EmptyDirsAction) const { print_empty_directories(os, compute_empty_directories(tree), tree); }
-
-    void operator()(SymlinksAction) const { print_symlinks(os, compute_symlinks(tree), tree); }
-
-    void operator()(LargestFilesAction op) const { print_largest_files(os, compute_largest_N_Files(tree, op.n), tree); }
-
-    void operator()(LargestDirsAction op) const
+    // Caches
+    void prewarm() const
     {
-        print_largest_directories(os, compute_largest_N_Directories(tree, get_metrics(), op.n), tree);
+        get_metrics();
+        get_empty_dir();
+        get_file_stats();
     }
 
-    void operator()(RecentAction op) const
+    std::string operator()(SummaryAction) const
     {
-        print_recent_files(os, compute_recent_files(tree, op.duration), op.duration, tree);
+        std::ostringstream out;
+        print_summary(out, compute_summary(tree, get_metrics(), get_empty_dir().size(), get_file_stats()), tree);
+        return out.str();
     }
 
-    void operator()(ErrorsAction) const { print_errors(os, get_errors(tree)); }
-
-    void operator()(StatsAction) const
+    std::string operator()(ExtensionsAction) const
     {
-        print_directory_stats(os, compute_directory_stats(tree, get_metrics()), tree);
+        std::ostringstream out;
+        print_extension_stats(out, compute_extension_stats(tree));
+        return out.str();
     }
 
-    void operator()(MetricsAction) const { print_directory_metrics(os, compute_directory_metrics(tree), tree); }
+    std::string operator()(EmptyDirsAction) const
+    {
+        std::ostringstream out;
+        print_empty_directories(out, get_empty_dir(), tree);
+        return out.str();
+    }
+
+    std::string operator()(SymlinksAction) const
+    {
+        std::ostringstream out;
+        print_symlinks(out, get_file_stats().symlink_ids, tree);
+        return out.str();
+    }
+
+    std::string operator()(LargestFilesAction op) const
+    {
+        std::ostringstream out;
+        print_largest_files(out, compute_largest_N_Files(tree, op.n), tree);
+        return out.str();
+    }
+
+    std::string operator()(LargestDirsAction op) const
+    {
+        std::ostringstream out;
+        print_largest_directories(out, compute_largest_N_Directories(tree, get_metrics(), op.n), tree);
+        return out.str();
+    }
+
+    std::string operator()(RecentAction op) const
+    {
+        std::ostringstream out;
+        print_recent_files(out, compute_recent_files(tree, op.duration), op.duration, tree);
+        return out.str();
+    }
+
+    std::string operator()(ErrorsAction) const
+    {
+        std::ostringstream out;
+        print_errors(out, get_errors(tree));
+        return out.str();
+    }
+
+    std::string operator()(StatsAction) const
+    {
+        std::ostringstream out;
+        print_directory_stats(out, compute_directory_stats(tree, get_metrics()), tree);
+        return out.str();
+    }
+
+    std::string operator()(MetricsAction) const
+    {
+        std::ostringstream out;
+        print_directory_metrics(out, get_metrics(), tree);
+        return out.str();
+    }
+
+    void run(const std::vector<Action>& actions) const
+    {
+        // compute shared data in parallel
+        auto f_metrics = std::async(std::launch::async, [this] { return compute_directory_metrics(tree); });
+        auto f_empty_dirs = std::async(std::launch::async, [this] { return compute_empty_directories(tree); });
+        auto f_file_stats = std::async(std::launch::async, [this] { return compute_file_stats(tree); });
+
+        metrics = f_metrics.get();
+        empty_dirs = f_empty_dirs.get();
+        file_stats = f_file_stats.get();
+
+        std::vector<std::future<std::string>> futures;
+        futures.reserve(actions.size());
+
+        // launch multiple analysis in pararell
+        for (const auto& action : actions)
+        {
+            futures.push_back(std::async(std::launch::async, [this, action] { return std::visit(*this, action); }));
+        }
+
+        for (auto& f : futures)
+        {
+            os << f.get();
+        }
+    }
 };
