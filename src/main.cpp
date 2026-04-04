@@ -1,16 +1,20 @@
-import builder;
-import parser;
-import executor;
-
 #include <iostream>
 #include <span>
 #include <string_view>
 #include <variant>
 #include <vector>
 
+import builder;
+import parser;
+import executor;
+
 auto main(int argc, char* argv[]) -> int
 {
-    const std::span args(argv + 1, static_cast<std::size_t>(argc - 1));
+    std::ios::sync_with_stdio(false);
+    std::cout.tie(nullptr);
+
+    // view of CLI argument, skipping the program name
+    const std::vector<std::string_view> args(argv + 1, argv + argc);
 
     if (args.empty())
     {
@@ -18,32 +22,28 @@ auto main(int argc, char* argv[]) -> int
         return 0;
     }
 
-    std::vector<std::string_view> input(args.begin(), args.end());
-    const auto result = parse(input);
+    const auto result = parse(std::span{args});
 
-    if (!result.errors.empty())
+    if (!result)
     {
-        for (const auto& err : result.errors)
+        for (const auto& err : result.error())
         {
             std::cerr << "warning: " << err << '\n';
             std::cerr << '\n';
         }
     }
 
-    if (result.actions.empty())
+    if (result->actions.empty())
     {
         print_help(std::cout);
-        return result.errors.empty() ? 0 : 1;
+        return 0;
     }
 
-    const auto tree = build_tree(result.path);
+    const auto tree = build_tree(result->path);
 
     const Executor executor{tree, std::cout};
 
-    for (const auto& action : result.actions)
-    {
-        std::visit(executor, action);
-    }
+    executor.run(result->actions);
 
     return 0;
 }

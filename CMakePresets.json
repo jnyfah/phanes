@@ -3,23 +3,38 @@
 
   "configurePresets": [
     {
-      "name": "ninja-debug",
+      "name": "ninja-base",
       "generator": "Ninja",
-      "binaryDir": "build/ninja-debug",
+      "binaryDir": "build/${presetName}",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "CMAKE_CXX_COMPILER": "clang++",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
       }
     },
     {
+      "name": "ninja-debug",
+      "inherits": "ninja-base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_CXX_COMPILER": "clang++"
+      }
+    },
+    {
       "name": "ninja-release",
-      "generator": "Ninja",
-      "binaryDir": "build/ninja-release",
+      "inherits": "ninja-base",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_CXX_COMPILER": "clang++",
-        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+        "CMAKE_CXX_COMPILER": "clang++"
+      }
+    },
+    {
+      "name": "CI-clang19",
+      "inherits": "ninja-base",
+      "binaryDir": "build/CI-clang19",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_C_COMPILER": "clang-19",
+        "CMAKE_CXX_COMPILER": "clang++-19",
+        "CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS": "/usr/bin/clang-scan-deps-19"
       }
     },
     {
@@ -42,6 +57,10 @@
     {
       "name": "ninja-release",
       "configurePreset": "ninja-release"
+    },
+    {
+      "name": "CI-clang19",
+      "configurePreset": "CI-clang19"
     },
     {
       "name": "msvc-debug",
