@@ -32,29 +32,6 @@ compute_extension_stats builds an unordered_map then sorts at the end. Since you
 std::flat_map	analyzer extension stats	Low-medium — cache win, fits the usage
 
 
-
-
-
-unning actions in parallel — yes, this is real
-Looking at main.cpp:43-46:
-
-
-for (const auto& action : result.actions)
-    std::visit(executor, action);
-
-Actions run sequentially. But compute_extension_stats, compute_recent_files,
- and compute_largest_N_Files are completely independent — they only read tree. 
- If a user runs --extensions --recent 7d --largest-files 10, that's three full O(N) passes over all 
- files done one after another.
-
-These could be launched with std::async in parallel, results collected into a vector in submission order
-, then printed sequentially. The Executor's cached state (file_stats, metrics, empty_dirs) 
-would need to be pre-warmed before spawning, since those use mutable optional which isn't thread-safe.
- But the heavy compute functions themselves only take const DirectoryTree& — safe to run concurrently.
-
-That's the most interesting remaining optimization and it's cross-platform.
-
-
 Parser tests (pure unit tests — easiest to start)
 The parser is fully std::expected-based with no I/O side effects, making it ideal for unit testing:
 

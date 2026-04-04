@@ -13,7 +13,8 @@ auto main(int argc, char* argv[]) -> int
     std::ios::sync_with_stdio(false);
     std::cout.tie(nullptr);
 
-    const std::span args(argv + 1, static_cast<std::size_t>(argc - 1));
+    // view of CLI argument, skipping the program name
+    const std::vector<std::string_view> args(argv + 1, argv + argc);
 
     if (args.empty())
     {
@@ -21,8 +22,7 @@ auto main(int argc, char* argv[]) -> int
         return 0;
     }
 
-    std::vector<std::string_view> input(args.begin(), args.end());
-    const auto result = parse(input);
+    const auto result = parse(std::span{args});
 
     if (!result)
     {

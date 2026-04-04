@@ -15,7 +15,7 @@ jobs:
       matrix:
         include:
           - os: ubuntu-24.04
-            preset: ninja-release-clang19
+            preset: CI-clang19
 
           - os: windows-latest
             preset: msvc-release

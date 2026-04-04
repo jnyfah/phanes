@@ -105,5 +105,5 @@ constexpr std::array<FlagSpec, N> flag_table{
 
 export auto parse_positive_size(std::string_view str, std::string_view flag_name) -> std::expected<size_t, std::string>;
 
-export auto parse(std::span<std::string_view> args) -> std::expected<ParseResult, std::vector<std::string>>;
+export auto parse(const std::span<const std::string_view> args) -> std::expected<ParseResult, std::vector<std::string>>;
 export void print_help(std::ostream& os);

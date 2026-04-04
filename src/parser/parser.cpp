@@ -148,7 +148,7 @@ auto parse_positive_size(std::string_view str, std::string_view flag_name) -> st
     return value;
 }
 
-auto parse(std::span<std::string_view> args) -> std::expected<ParseResult, std::vector<std::string>>
+auto parse(const std::span<const std::string_view> args) -> std::expected<ParseResult, std::vector<std::string>>
 {
     ParseResult result{};
     std::vector<std::string> errors;

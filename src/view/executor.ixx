@@ -51,8 +51,7 @@ export struct Executor
         return *file_stats;
     }
 
-    // Populate all caches single-threaded before spawning async tasks.
-    // The mutable optionals are not thread-safe to write concurrently.
+    // Caches
     void prewarm() const
     {
         get_metrics();
@@ -132,11 +131,13 @@ export struct Executor
 
     void run(const std::vector<Action>& actions) const
     {
+        //get shared data
         prewarm();
 
         std::vector<std::future<std::string>> futures;
         futures.reserve(actions.size());
 
+        // launch multiple analysis in pararell
         for (const auto& action : actions)
         {
             futures.push_back(std::async(std::launch::async, [this, action] { return std::visit(*this, action); }));
