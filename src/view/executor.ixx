@@ -131,7 +131,7 @@ export struct Executor
 
     void run(const std::vector<Action>& actions) const
     {
-        //get shared data
+        // get shared data
         prewarm();
 
         std::vector<std::future<std::string>> futures;
