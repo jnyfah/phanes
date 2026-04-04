@@ -31,13 +31,13 @@ class ThreadPool
     static inline constexpr std::size_t no_worker_id = static_cast<std::size_t>(-1);
     static inline thread_local std::size_t current_worker_id = no_worker_id;
 
-    std::vector<std::unique_ptr<Worker>> workers;
     std::condition_variable condition;
     std::mutex sleep_guard;
 
     std::stop_source pool_stop;
     std::atomic<size_t> idle_workers{0};
     std::atomic<size_t> pending_tasks{0};
+    std::vector<std::unique_ptr<Worker>> workers;
 
     Handler handler;
 
@@ -102,11 +102,6 @@ class ThreadPool
                 for (size_t i = 0; i < STEAL_ATTEMPTS && !task_id.has_value(); ++i)
                 {
                     task_id = try_steal(self_worker, id, steal_start_counter);
-                }
-
-                if (!task_id.has_value())
-                {
-                    std::this_thread::yield();
                 }
             }
 

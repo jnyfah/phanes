@@ -228,6 +228,3 @@ DirectoryTree build_tree(const std::filesystem::path& root)
 {
     return Scanner{}.build(root);
 }
-
-// to do
-// make scan time ms
