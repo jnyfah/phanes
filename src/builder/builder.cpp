@@ -137,12 +137,16 @@ void Scanner::scan_directory(DirectoryId id)
     }
 
     // flush local files and errors, one lock acquisition per directory scan
+    std::vector<FileId> local_file_ids;
+    local_file_ids.reserve(local_files.size());
     {
         std::lock_guard lock(guard);
-        for (auto& files : local_files)
+        for (auto& file : local_files)
         {
-            files.id = next_file_id.fetch_add(1, std::memory_order_relaxed);
-            tree.files.push_back(files);
+            FileId fid = next_file_id.fetch_add(1, std::memory_order_relaxed);
+            file.id = fid;
+            local_file_ids.push_back(fid);
+            tree.files.push_back(std::move(file));
         }
         for (auto& error : local_errors)
         {
@@ -151,12 +155,12 @@ void Scanner::scan_directory(DirectoryId id)
     }
 
     // update this directory's file list
-    if (!local_files.empty())
+    if (!local_file_ids.empty())
     {
         std::shared_lock lock(dir_mutex);
-        for (const auto& files : local_files)
+        for (FileId fid : local_file_ids)
         {
-            tree.directories[id].files.push_back(files.id);
+            tree.directories[id].files.push_back(fid);
         }
     }
 
