@@ -131,8 +131,14 @@ export struct Executor
 
     void run(const std::vector<Action>& actions) const
     {
-        // get shared data
-        prewarm();
+        // compute shared data in parallel
+        auto f_metrics    = std::async(std::launch::async, [this] { return compute_directory_metrics(tree); });
+        auto f_empty_dirs = std::async(std::launch::async, [this] { return compute_empty_directories(tree); });
+        auto f_file_stats = std::async(std::launch::async, [this] { return compute_file_stats(tree); });
+
+        metrics    = f_metrics.get();
+        empty_dirs = f_empty_dirs.get();
+        file_stats = f_file_stats.get();
 
         std::vector<std::future<std::string>> futures;
         futures.reserve(actions.size());
