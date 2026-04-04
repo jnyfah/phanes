@@ -109,16 +109,6 @@ void Scanner::scan_directory(DirectoryId id)
                 file.modified = std::chrono::floor<std::chrono::seconds>(sysTime);
             }
 
-            if (!is_symlink && size_ec && size_ec != std::errc::permission_denied &&
-                size_ec != std::errc::no_such_file_or_directory)
-            {
-                local_errors.push_back({entry.path(), ErrorKind::FileError, NodeKind::File});
-            }
-            if (time_ec && time_ec != std::errc::permission_denied && time_ec != std::errc::no_such_file_or_directory)
-            {
-                local_errors.push_back({entry.path(), ErrorKind::FileError, NodeKind::File});
-            }
-
             local_files.push_back(std::move(file));
             break;
         }
