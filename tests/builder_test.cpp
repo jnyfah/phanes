@@ -45,7 +45,7 @@ struct TempDir
     }
 
     // Write a file with the given content (default empty)
-    fs::path make_file(const fs::path& rel, std::string content = "x") const
+    fs::path make_file(const fs::path& rel, const std::string& content = "x") const
     {
         auto full = path / rel;
         fs::create_directories(full.parent_path());
