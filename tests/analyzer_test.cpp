@@ -20,9 +20,6 @@ static TimePoint now_sec()
     return std::chrono::floor<std::chrono::seconds>(std::chrono::system_clock::now());
 }
 
-// Builds a DirectoryTree in memory for testing.
-// IDs are assigned sequentially so they equal their index in the deques,
-// which is what all analyzer functions assume.
 struct TreeBuilder
 {
     DirectoryTree tree;
@@ -188,11 +185,10 @@ TEST(ComputeEmptyDirectories, RootWithSubdirIsNotEmpty)
 {
     TreeBuilder b;
     b.add_root();
-    b.add_dir(0, "/test/sub"); // root.subdirs is non-empty → root not empty
-    // sub has no files → sub is empty
+    b.add_dir(0, "/test/sub");
     auto result = compute_empty_directories(b.build());
     ASSERT_EQ(result.size(), 1u);
-    EXPECT_EQ(result[0], 1u); // only sub (id=1) is empty
+    EXPECT_EQ(result[0], 1u); 
 }
 
 // ============================================================
@@ -452,7 +448,7 @@ TEST(ComputeExtensionStats, MultipleExtensionsSortedBySizeDesc)
     b.add_file(0, "/test/c.hpp", 200);
     auto result = compute_extension_stats(b.build());
     ASSERT_EQ(result.size(), 3u);
-    EXPECT_EQ(result[0].extension, ".cpp"); // largest total size first
+    EXPECT_EQ(result[0].extension, ".cpp");
     EXPECT_EQ(result[1].extension, ".hpp");
     EXPECT_EQ(result[2].extension, ".txt");
 }
@@ -478,13 +474,13 @@ TEST(ComputeExtensionStats, FileWithNoExtension)
     b.add_file(0, "/test/LICENSE", 500);
     auto result = compute_extension_stats(b.build());
     ASSERT_EQ(result.size(), 1u);
-    EXPECT_EQ(result[0].extension, ""); // no extension → empty string key
+    EXPECT_EQ(result[0].extension, "");
     EXPECT_EQ(result[0].count, 2u);
     EXPECT_EQ(result[0].total_size, 1500u);
 }
 
 // ============================================================
-// compute_largest_N_Directories — edge cases
+// compute_largest_N_Directories
 // ============================================================
 
 TEST(ComputeLargestNDirectories, NIsZeroReturnsEmpty)
@@ -528,7 +524,6 @@ TEST(ComputeDirectoryStats, EmptyMetrics)
     DirectoryTree tree;
     DirectoryMetrics metrics;
     auto stats = compute_directory_stats(tree, metrics);
-    // All zero — no crash
     EXPECT_EQ(stats.max_depth, 0u);
     EXPECT_EQ(stats.max_files_count, 0u);
     EXPECT_DOUBLE_EQ(stats.average_directory_depth, 0.0);
@@ -545,7 +540,7 @@ TEST(ComputeDirectoryStats, MaxDepthIsDeepestNonRoot)
     auto metrics = compute_directory_metrics(tree);
     auto stats = compute_directory_stats(tree, metrics);
     EXPECT_EQ(stats.max_depth, 2u); // /test/sub/deep is at depth 2
-    EXPECT_EQ(stats.max_depth_dir, 2u); // id 2 (root=0, sub=1, deep=2)
+    EXPECT_EQ(stats.max_depth_dir, 2u);
 }
 
 TEST(ComputeDirectoryStats, MaxFilesCountDir)
@@ -566,8 +561,6 @@ TEST(ComputeDirectoryStats, MaxFilesCountDir)
 
 TEST(ComputeDirectoryStats, AverageDepthIsCorrect)
 {
-    // root (depth 0, excluded from average) + 2 subdirs (depth 1 each)
-    // average = (1 + 1) / 2 = 1.0
     TreeBuilder b;
     b.add_root();
     b.add_dir(0, "/test/a");
@@ -580,7 +573,6 @@ TEST(ComputeDirectoryStats, AverageDepthIsCorrect)
 
 TEST(ComputeDirectoryStats, AverageFilesPerDirectory)
 {
-    // 2 non-root subdirs, 3 files total (all under sub1) → average = 3/2 = 1.5
     TreeBuilder b;
     b.add_root();
     DirectoryId sub1 = b.add_dir(0, "/test/sub1");

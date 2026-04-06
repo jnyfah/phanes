@@ -137,10 +137,6 @@ TEST(BuildTree, FlatDirectoryWithFiles)
     EXPECT_FALSE(fb->is_symlink);
 }
 
-// ============================================================
-// Nested structure — parent/child relationships
-// ============================================================
-
 TEST(BuildTree, NestedDirectoryStructure)
 {
     TempDir tmp;
@@ -173,7 +169,7 @@ TEST(BuildTree, NestedDirectoryStructure)
 }
 
 // ============================================================
-// Symlink — flagged and not sized
+// Symlink
 // ============================================================
 
 TEST(BuildTree, SymlinkIsMarkedAndNotSized)
@@ -197,7 +193,7 @@ TEST(BuildTree, SymlinkIsMarkedAndNotSized)
 }
 
 // ============================================================
-// Non-existent path → error, no root
+// Non-existent path = error, no root
 // ============================================================
 
 TEST(BuildTree, NonExistentPath)
@@ -213,7 +209,7 @@ TEST(BuildTree, NonExistentPath)
 }
 
 // ============================================================
-// File path passed as root → IOError, no root
+// File path passed as root = IOError, no root
 // ============================================================
 
 TEST(BuildTree, FilePassedAsRoot)
@@ -230,11 +226,6 @@ TEST(BuildTree, FilePassedAsRoot)
     EXPECT_EQ(tree.errors[0].kind, ErrorKind::IOError);
 }
 
-// ============================================================
-// Unreadable subdir, silently gets no children (not an error),
-// because the builder uses skip_permission_denied.
-// Skip when running as root since chmod has no effect then.
-// ============================================================
 
 TEST(BuildTree, UnreadableSubdirHasNoChildren)
 {
@@ -254,19 +245,14 @@ TEST(BuildTree, UnreadableSubdirHasNoChildren)
 
     auto tree = build_tree(tmp.path);
 
-    // Restore so TempDir destructor can clean up
     fs::permissions(locked, fs::perms::all);
 
-    // The locked dir should appear in the tree but have no children
     auto* d = find_dir(tree, fs::weakly_canonical(locked));
     ASSERT_NE(d, nullptr);
     EXPECT_TRUE(d->files.empty());
     EXPECT_TRUE(d->subdirs.empty());
 
-    // The file inside is invisible — not scanned
     EXPECT_EQ(tree.files.size(), 0u);
-
-    // No error recorded — skip_permission_denied swallows it silently
     EXPECT_TRUE(tree.errors.empty());
 }
 
@@ -282,7 +268,7 @@ TEST(BuildTree, ScanTimestampsAreOrdered)
 }
 
 // ============================================================
-// Deeply nested tree — 3 levels, all dirs and files present
+// Deeply nested tree = 3 levels, all dirs and files present
 // ============================================================
 
 TEST(BuildTree, DeeplyNestedThreeLevels)
@@ -306,7 +292,6 @@ TEST(BuildTree, DeeplyNestedThreeLevels)
     ASSERT_NE(l2, nullptr);
     ASSERT_NE(l3, nullptr);
 
-    // parent-child chain
     EXPECT_FALSE(root->parent.has_value());
     ASSERT_TRUE(l1->parent.has_value());
     EXPECT_EQ(*l1->parent, root->id);
@@ -315,18 +300,16 @@ TEST(BuildTree, DeeplyNestedThreeLevels)
     ASSERT_TRUE(l3->parent.has_value());
     EXPECT_EQ(*l3->parent, l2->id);
 
-    // leaf file is under l3
     auto* f = find_file(tree, leaf_file);
     ASSERT_NE(f, nullptr);
     EXPECT_EQ(f->parent, l3->id);
 
-    // depth propagation through compute_directory_metrics
     auto metrics = compute_directory_metrics(tree);
     EXPECT_EQ(metrics.depth[l3->id], 3u);
 }
 
 // ============================================================
-// Multiple subdirs each with files — concurrent flush path
+// Multiple subdirs each with files
 // ============================================================
 
 TEST(BuildTree, MultipleSubdirsWithFiles)
