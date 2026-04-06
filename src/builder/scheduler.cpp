@@ -20,8 +20,8 @@ struct Worker
     Worker(const Worker&) = delete;
     auto operator=(const Worker&) -> Worker& = delete;
 
-    std::jthread thread;
     LockFreeDeque<std::size_t> tasks;
+    std::jthread thread;
 };
 
 template <typename Handler>
@@ -180,6 +180,13 @@ class ThreadPool
     {
         pool_stop.request_stop();
         condition.notify_all();
+        for (const auto& w : workers)
+        {
+            if (w->thread.joinable())
+            {
+                w->thread.join();
+            }
+        }
     }
 
     ThreadPool(const ThreadPool&) = delete;

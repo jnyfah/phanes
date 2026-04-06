@@ -12,7 +12,10 @@ set(CMAKE_CXX_SCAN_FOR_MODULES ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 
+enable_testing()
+
 add_subdirectory(src)
+add_subdirectory(tests)
 
 option(PHANES_BUILD_BENCHMARKS "Build Google Benchmark benchmarks" OFF)
 if(PHANES_BUILD_BENCHMARKS)
