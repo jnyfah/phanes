@@ -1,0 +1,74 @@
+name: "CodeQL Advanced"
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  schedule:
+    - cron: '25 9 * * 0'
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+
+    permissions:
+      security-events: write
+      packages: read
+      actions: read
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: actions
+            build-mode: none
+          - language: c-cpp
+            build-mode: manual
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install CMake and Ninja
+        if: matrix.language == 'c-cpp'
+        uses: lukka/get-cmake@latest
+        with:
+          cmakeVersion: "~4.2"
+          ninjaVersion: "latest"
+
+      - name: Install Clang 19 and scan-deps
+        if: matrix.language == 'c-cpp'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-19 clang-tools-19 lld-19 ninja-build
+
+      - name: Show tool versions
+        if: matrix.language == 'c-cpp'
+        run: |
+          cmake --version
+          ninja --version
+          clang-19 --version
+          clang++-19 --version
+          clang-scan-deps-19 --version
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+
+      - name: Configure with preset
+        if: matrix.language == 'c-cpp'
+        run: cmake --preset CI-clang19
+
+      - name: Build with preset
+        if: matrix.language == 'c-cpp'
+        run: cmake --build --preset CI-clang19 --parallel
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:${{ matrix.language }}"
