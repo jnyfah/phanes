@@ -28,8 +28,9 @@ struct TreeBuilder
     DirectoryTree tree;
     TimePoint _now;
 
-    TreeBuilder() : _now(now_sec())
+    TreeBuilder()
     {
+        _now = now_sec();
         tree.scan_started = _now;
         tree.scan_finished = _now + std::chrono::seconds(1);
     }

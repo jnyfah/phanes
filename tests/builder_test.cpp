@@ -1,9 +1,12 @@
 #include <chrono>
+#include <cstdint>
 #include <deque>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <gtest/gtest.h>
 #include <optional>
+#include <random>
 #include <string>
 #include <vector>
 
@@ -27,9 +30,12 @@ struct TempDir
 
     TempDir()
     {
-        path = fs::temp_directory_path() /
-            ("phanes_test_" + std::to_string(std::chrono::system_clock::now().time_since_epoch().count()));
-        fs::create_directories(path);
+        std::random_device rd;
+        std::uniform_int_distribution<std::uint64_t> dist;
+        do
+        {
+            path = fs::temp_directory_path() / std::format("phanes_test_{:016x}", dist(rd));
+        } while (!fs::create_directory(path));
     }
 
     ~TempDir()

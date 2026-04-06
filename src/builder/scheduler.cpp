@@ -180,7 +180,7 @@ class ThreadPool
     {
         pool_stop.request_stop();
         condition.notify_all();
-        for (auto& w : workers)
+        for (const auto& w : workers)
         {
             if (w->thread.joinable())
             {
