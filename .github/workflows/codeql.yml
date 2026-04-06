@@ -11,7 +11,7 @@ on:
 jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
-    runs-on: ${{ (matrix.language == 'swift' && 'macos-latest') || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
 
     permissions:
       security-events: write
@@ -39,12 +39,20 @@ jobs:
           cmakeVersion: "~4.2"
           ninjaVersion: "latest"
 
+      - name: Install Clang 19 and scan-deps
+        if: matrix.language == 'c-cpp'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-19 clang-tools-19 lld-19 ninja-build
+
       - name: Show tool versions
         if: matrix.language == 'c-cpp'
         run: |
           cmake --version
           ninja --version
-          c++ --version || true
+          clang-19 --version
+          clang++-19 --version
+          clang-scan-deps-19 --version
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
@@ -52,13 +60,13 @@ jobs:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
 
-      - name: Configure CMake
+      - name: Configure with preset
         if: matrix.language == 'c-cpp'
-        run: cmake -S . -B build/codeql -G Ninja -DCMAKE_BUILD_TYPE=Release
+        run: cmake --preset CI-clang19
 
-      - name: Build
+      - name: Build with preset
         if: matrix.language == 'c-cpp'
-        run: cmake --build build/codeql --parallel
+        run: cmake --build --preset CI-clang19 --parallel
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4
