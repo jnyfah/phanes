@@ -16,6 +16,10 @@ target_link_libraries(parser_test PRIVATE phanes_core GTest::gtest_main)
 add_executable(analyzer_test analyzer_test.cpp)
 target_link_libraries(analyzer_test PRIVATE phanes_core GTest::gtest_main)
 
+add_executable(builder_test builder_test.cpp)
+target_link_libraries(builder_test PRIVATE phanes_core GTest::gtest_main)
+
 include(GoogleTest)
 gtest_discover_tests(parser_test)
 gtest_discover_tests(analyzer_test)
+gtest_discover_tests(builder_test)
