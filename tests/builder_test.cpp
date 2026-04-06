@@ -7,8 +7,13 @@
 #include <string>
 #include <vector>
 
+#ifndef _WIN32
+#include <unistd.h>
+#endif
+
 import core;
 import builder;
+import analyzer;
 
 namespace fs = std::filesystem;
 
@@ -220,17 +225,21 @@ TEST(BuildTree, FilePassedAsRoot)
 }
 
 // ============================================================
-// Unreadable subdir — silently gets no children (not an error),
+// Unreadable subdir, silently gets no children (not an error),
 // because the builder uses skip_permission_denied.
 // Skip when running as root since chmod has no effect then.
 // ============================================================
 
 TEST(BuildTree, UnreadableSubdirHasNoChildren)
 {
+#ifdef _WIN32
+    GTEST_SKIP() << "Permission tests not supported on Windows";
+#else
     if (getuid() == 0)
     {
         GTEST_SKIP() << "Running as root; permission checks are bypassed";
     }
+#endif
 
     TempDir tmp;
     auto locked = tmp.make_dir("locked");
@@ -264,4 +273,87 @@ TEST(BuildTree, ScanTimestampsAreOrdered)
     TempDir tmp;
     auto tree = build_tree(tmp.path);
     EXPECT_LE(tree.scan_started, tree.scan_finished);
+}
+
+// ============================================================
+// Deeply nested tree — 3 levels, all dirs and files present
+// ============================================================
+
+TEST(BuildTree, DeeplyNestedThreeLevels)
+{
+    TempDir tmp;
+    tmp.make_dir("l1/l2/l3");
+    auto leaf_file = tmp.make_file("l1/l2/l3/leaf.txt", "deep");
+
+    auto tree = build_tree(tmp.path);
+
+    EXPECT_EQ(tree.directories.size(), 4u); // root, l1, l2, l3
+    EXPECT_EQ(tree.files.size(), 1u);
+    EXPECT_TRUE(tree.errors.empty());
+
+    auto* root = find_dir(tree, fs::weakly_canonical(tmp.path));
+    auto* l1 = find_dir(tree, fs::weakly_canonical(tmp.path / "l1"));
+    auto* l2 = find_dir(tree, fs::weakly_canonical(tmp.path / "l1/l2"));
+    auto* l3 = find_dir(tree, fs::weakly_canonical(tmp.path / "l1/l2/l3"));
+    ASSERT_NE(root, nullptr);
+    ASSERT_NE(l1, nullptr);
+    ASSERT_NE(l2, nullptr);
+    ASSERT_NE(l3, nullptr);
+
+    // parent-child chain
+    EXPECT_FALSE(root->parent.has_value());
+    ASSERT_TRUE(l1->parent.has_value());
+    EXPECT_EQ(*l1->parent, root->id);
+    ASSERT_TRUE(l2->parent.has_value());
+    EXPECT_EQ(*l2->parent, l1->id);
+    ASSERT_TRUE(l3->parent.has_value());
+    EXPECT_EQ(*l3->parent, l2->id);
+
+    // leaf file is under l3
+    auto* f = find_file(tree, leaf_file);
+    ASSERT_NE(f, nullptr);
+    EXPECT_EQ(f->parent, l3->id);
+
+    // depth propagation through compute_directory_metrics
+    auto metrics = compute_directory_metrics(tree);
+    EXPECT_EQ(metrics.depth[l3->id], 3u);
+}
+
+// ============================================================
+// Multiple subdirs each with files — concurrent flush path
+// ============================================================
+
+TEST(BuildTree, MultipleSubdirsWithFiles)
+{
+    TempDir tmp;
+    auto fa = tmp.make_file("a/one.txt", "aaa");
+    auto fb = tmp.make_file("b/two.txt", "bb");
+    auto fc = tmp.make_file("c/three.txt", "c");
+
+    auto tree = build_tree(tmp.path);
+
+    EXPECT_EQ(tree.directories.size(), 4u); // root + a, b, c
+    EXPECT_EQ(tree.files.size(), 3u);
+    EXPECT_TRUE(tree.errors.empty());
+
+    auto* f1 = find_file(tree, fa);
+    auto* f2 = find_file(tree, fb);
+    auto* f3 = find_file(tree, fc);
+    ASSERT_NE(f1, nullptr);
+    EXPECT_EQ(f1->size, 3u);
+    ASSERT_NE(f2, nullptr);
+    EXPECT_EQ(f2->size, 2u);
+    ASSERT_NE(f3, nullptr);
+    EXPECT_EQ(f3->size, 1u);
+
+    // each file is inside the correct subdir
+    auto* da = find_dir(tree, fs::weakly_canonical(tmp.path / "a"));
+    auto* db = find_dir(tree, fs::weakly_canonical(tmp.path / "b"));
+    auto* dc = find_dir(tree, fs::weakly_canonical(tmp.path / "c"));
+    ASSERT_NE(da, nullptr);
+    EXPECT_EQ(f1->parent, da->id);
+    ASSERT_NE(db, nullptr);
+    EXPECT_EQ(f2->parent, db->id);
+    ASSERT_NE(dc, nullptr);
+    EXPECT_EQ(f3->parent, dc->id);
 }
