@@ -83,7 +83,7 @@ std::string format_duration(std::chrono::seconds total)
         *ptr++ = ' ';
     }
 
-    if (seconds > 0 || ptr == buffer)
+    if (seconds > 0 || ptr == buffer.data())
     {
         append_number(seconds);
         *ptr++ = 's';
