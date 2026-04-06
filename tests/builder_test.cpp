@@ -20,10 +20,6 @@ import analyzer;
 
 namespace fs = std::filesystem;
 
-// ============================================================
-// RAII temp directory — removed recursively on destruction
-// ============================================================
-
 struct TempDir
 {
     fs::path path;
