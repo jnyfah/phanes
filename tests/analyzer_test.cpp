@@ -188,7 +188,7 @@ TEST(ComputeEmptyDirectories, RootWithSubdirIsNotEmpty)
     b.add_dir(0, "/test/sub");
     auto result = compute_empty_directories(b.build());
     ASSERT_EQ(result.size(), 1u);
-    EXPECT_EQ(result[0], 1u); 
+    EXPECT_EQ(result[0], 1u);
 }
 
 // ============================================================

@@ -226,7 +226,6 @@ TEST(BuildTree, FilePassedAsRoot)
     EXPECT_EQ(tree.errors[0].kind, ErrorKind::IOError);
 }
 
-
 TEST(BuildTree, UnreadableSubdirHasNoChildren)
 {
 #ifdef _WIN32
