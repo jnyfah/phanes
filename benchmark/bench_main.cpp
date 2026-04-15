@@ -1,3 +1,4 @@
+#include <array>
 #include <atomic>
 #include <benchmark/benchmark.h>
 #include <cassert>
@@ -91,7 +92,7 @@ class BenchLockFreeDeque
         if (b - f >= buf->capacity)
         {
             auto next = buf->resize(f, b);
-            auto* next_raw = next.get();
+            auto* const next_raw = next.get();
             old_buffers.push_back(std::move(next));
             buffer.store(next_raw, std::memory_order_release);
             buf = next_raw;
@@ -114,7 +115,7 @@ class BenchLockFreeDeque
             return std::nullopt;
         }
 
-        auto* buf = buffer.load(std::memory_order_relaxed);
+        auto* const buf = buffer.load(std::memory_order_relaxed);
 
         if (f == b)
         {
@@ -138,7 +139,7 @@ class BenchLockFreeDeque
         if (f >= b)
             return std::nullopt;
 
-        auto* buf = buffer.load(std::memory_order_relaxed);
+        auto* const buf = buffer.load(std::memory_order_relaxed);
         const T value = buf->data[f & buf->mask];
 
         if (!front.compare_exchange_strong(f, f + 1, std::memory_order_seq_cst, std::memory_order_relaxed))
@@ -334,7 +335,7 @@ BENCHMARK(BM_FalseSharing_Padded)->Unit(benchmark::kMicrosecond);
 // Synthetic DirectoryTree helpers
 // ============================================================================
 
-static const char* const kExtensions[] = {
+static constexpr std::array<const char* const, 10> kExtensions = {
     ".txt",
     ".cpp",
     ".hpp",
@@ -346,7 +347,6 @@ static const char* const kExtensions[] = {
     ".ts",
     ".js",
 };
-static constexpr std::size_t kNumExtensions = 10;
 
 static DirectoryTree
 make_synthetic_tree(std::size_t num_dirs, std::size_t files_per_dir, std::size_t num_empty_dirs = 0)
@@ -377,7 +377,7 @@ make_synthetic_tree(std::size_t num_dirs, std::size_t files_per_dir, std::size_t
 
         for (std::size_t f = 0; f < files_per_dir; ++f)
         {
-            const auto ext = kExtensions[(d * files_per_dir + f) % kNumExtensions];
+            const auto ext = kExtensions[(d * files_per_dir + f) % kExtensions.size()];
 
             FileNode file{};
             file.id = fid;
