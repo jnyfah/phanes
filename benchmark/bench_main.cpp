@@ -5,10 +5,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <memory>
 #include <optional>
-#include <string>
 #include <thread>
 #include <type_traits>
 #include <utility>
@@ -32,8 +32,7 @@ fs::path make_unique_bench_path(std::string_view stem)
 {
     const auto now = std::chrono::steady_clock::now().time_since_epoch().count();
     return fs::temp_directory_path() /
-        (std::string(stem) + "_" + std::to_string(now) + "_" +
-         std::to_string(std::hash<std::thread::id>{}(std::this_thread::get_id())));
+        std::format("{}_{}_{}",  stem, now, std::hash<std::thread::id>{}(std::this_thread::get_id()));
 }
 
 template <typename T>
@@ -220,7 +219,7 @@ BENCHMARK(BM_Deque_PushPop_Steady)->Arg(64)->Arg(512)->Arg(4096)->Unit(benchmark
 // Thread creation is excluded from timed measurement.
 static void BM_Deque_StealContention(benchmark::State& state)
 {
-    const int num_thieves = static_cast<int>(state.range(0));
+    const auto num_thieves = static_cast<int>(state.range(0));
     constexpr std::size_t N = 512;
 
     BenchLockFreeDeque<std::size_t> deque;
@@ -228,7 +227,7 @@ static void BM_Deque_StealContention(benchmark::State& state)
     std::atomic<bool> stop{false};
 
     state.PauseTiming();
-    std::vector<std::thread> thieves;
+    std::vector<std::jthread> thieves;
     thieves.reserve(static_cast<std::size_t>(num_thieves));
 
     for (int t = 0; t < num_thieves; ++t)
@@ -373,7 +372,7 @@ make_synthetic_tree(std::size_t num_dirs, std::size_t files_per_dir, std::size_t
         DirectoryNode dir{};
         dir.id = did;
         dir.parent = DirectoryId{0};
-        dir.path = "/bench/dir" + std::to_string(d);
+        dir.path = std::format("/bench/dir{}", d);
         dir.readable = true;
 
         for (std::size_t f = 0; f < files_per_dir; ++f)
@@ -383,7 +382,7 @@ make_synthetic_tree(std::size_t num_dirs, std::size_t files_per_dir, std::size_t
             FileNode file{};
             file.id = fid;
             file.parent = did;
-            file.path = dir.path / ("file" + std::to_string(f) + std::string(ext));
+            file.path = dir.path / std::format("file{}{}", f, ext);
             file.size = static_cast<std::uintmax_t>((d + 1) * (f + 1) * 1024);
             file.modified = (f % 5 == 0) ? old_ts : now;
             file.readable = true;
@@ -404,7 +403,7 @@ make_synthetic_tree(std::size_t num_dirs, std::size_t files_per_dir, std::size_t
         DirectoryNode empty{};
         empty.id = did;
         empty.parent = DirectoryId{0};
-        empty.path = "/bench/empty" + std::to_string(e);
+        empty.path = std::format("/bench/empty{}", e);
         empty.readable = true;
         tree.directories[0].subdirs.push_back(did);
         tree.directories.push_back(empty);
@@ -532,10 +531,10 @@ static void create_flat_tree(const fs::path& root, int dirs, int files)
     fs::remove_all(root);
     for (int d = 0; d < dirs; ++d)
     {
-        auto dir = root / ("d" + std::to_string(d));
+        auto dir = root / std::format("d{}", d);
         fs::create_directories(dir);
         for (int f = 0; f < files; ++f)
-            std::ofstream{dir / ("f" + std::to_string(f) + ".txt")} << 'x';
+            std::ofstream{dir / std::format("f{}.txt", f)} << 'x';
     }
 }
 
@@ -546,10 +545,10 @@ static void create_nested_tree(const fs::path& root, int l1, int l2_per_l1, int 
     {
         for (int j = 0; j < l2_per_l1; ++j)
         {
-            auto dir = root / ("l1_" + std::to_string(i)) / ("l2_" + std::to_string(j));
+            auto dir = root / std::format("l1_{}", i) / std::format("l2_{}", j);
             fs::create_directories(dir);
             for (int f = 0; f < files; ++f)
-                std::ofstream{dir / ("f" + std::to_string(f) + ".txt")} << 'x';
+                std::ofstream{dir / std::format("f{}.txt", f)} << 'x';
         }
     }
 }
@@ -592,7 +591,7 @@ static void BM_BuildTree_Granularity(benchmark::State& state)
         benchmark::DoNotOptimize(build_tree(root));
 
     state.SetItemsProcessed(state.iterations() * static_cast<int64_t>(dirs) * files);
-    state.SetLabel("dirs=" + std::to_string(dirs) + " files=" + std::to_string(files));
+    state.SetLabel(std::format("dirs={} files={}", dirs, files));
 
     state.PauseTiming();
     fs::remove_all(root);
@@ -672,14 +671,14 @@ static void BM_BuildTree_Skewed(benchmark::State& state)
     auto heavy = root / "heavy";
     fs::create_directories(heavy);
     for (int f = 0; f < 800; ++f)
-        std::ofstream{heavy / ("f" + std::to_string(f) + ".txt")} << 'x';
+        std::ofstream{heavy / std::format("f{}.txt", f)} << 'x';
 
     for (int d = 0; d < 100; ++d)
     {
-        auto dir = root / ("light_" + std::to_string(d));
+        auto dir = root / std::format("light_{}", d);
         fs::create_directories(dir);
         for (int f = 0; f < 2; ++f)
-            std::ofstream{dir / ("f" + std::to_string(f) + ".txt")} << 'x';
+            std::ofstream{dir / std::format("f{}.txt", f)} << 'x';
     }
     state.ResumeTiming();
 
@@ -707,7 +706,7 @@ static void BM_BuildTree_ThreadScaling(benchmark::State& state)
         benchmark::DoNotOptimize(build_tree(root, num_threads));
 
     state.SetItemsProcessed(state.iterations() * 10000);
-    state.SetLabel(std::to_string(num_threads) + " thread(s)");
+    state.SetLabel(std::format("{} thread(s)", num_threads));
 
     state.PauseTiming();
     fs::remove_all(root);
