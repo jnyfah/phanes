@@ -6,8 +6,8 @@ module;
 #include <mutex>
 #include <shared_mutex>
 #include <system_error>
-#include <vector>
 #include <thread>
+#include <vector>
 module builder;
 
 import :scheduler;
