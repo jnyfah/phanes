@@ -32,7 +32,7 @@ fs::path make_unique_bench_path(std::string_view stem)
 {
     const auto now = std::chrono::steady_clock::now().time_since_epoch().count();
     return fs::temp_directory_path() /
-        std::format("{}_{}_{}",  stem, now, std::hash<std::thread::id>{}(std::this_thread::get_id()));
+        std::format("{}_{}_{}", stem, now, std::hash<std::thread::id>{}(std::this_thread::get_id()));
 }
 
 template <typename T>
