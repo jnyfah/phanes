@@ -223,8 +223,8 @@ static void BM_Deque_StealContention(benchmark::State& state)
     constexpr std::size_t N = 512;
 
     BenchLockFreeDeque<std::size_t> deque;
-    std::atomic<bool> start{false};
-    std::atomic<bool> stop{false};
+    std::atomic start{false};
+    std::atomic stop{false};
 
     state.PauseTiming();
     std::vector<std::jthread> thieves;
@@ -559,7 +559,7 @@ static void create_nested_tree(const fs::path& root, int l1, int l2_per_l1, int 
 
 static void BM_BuildTree_ThreadOverhead(benchmark::State& state)
 {
-    const int dirs = static_cast<int>(state.range(0));
+    const auto dirs = static_cast<int>(state.range(0));
     const auto root = make_unique_bench_path("phanes_bench_overhead");
 
     state.PauseTiming();
