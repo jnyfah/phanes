@@ -285,7 +285,7 @@ struct PaddedCounters
 };
 
 template <typename Counters>
-static void run_false_sharing_bench(benchmark::State& state)
+void run_false_sharing_bench(benchmark::State& state)
 {
     constexpr std::size_t iters = 1'000'000;
 
