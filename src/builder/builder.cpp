@@ -7,13 +7,14 @@ module;
 #include <shared_mutex>
 #include <system_error>
 #include <vector>
+#include <thread>
 module builder;
 
 import :scheduler;
 
 struct Scanner
 {
-    auto build(const std::filesystem::path& root) -> DirectoryTree;
+    auto build(const std::filesystem::path& root, std::size_t num_threads) -> DirectoryTree;
 
   private:
     void scan_directory(DirectoryId id);
@@ -170,7 +171,7 @@ void Scanner::scan_directory(DirectoryId id)
     }
 }
 
-auto Scanner::build(const std::filesystem::path& root) -> DirectoryTree
+auto Scanner::build(const std::filesystem::path& root, std::size_t num_threads) -> DirectoryTree
 {
     tree.scan_started = std::chrono::floor<std::chrono::seconds>(std::chrono::system_clock::now());
 
@@ -208,7 +209,7 @@ auto Scanner::build(const std::filesystem::path& root) -> DirectoryTree
     tree.directories.push_back(root_node);
     tree.root = root_node.id;
 
-    ThreadPool pool([this](DirectoryId id) { scan_directory(id); });
+    ThreadPool pool([this](DirectoryId id) { scan_directory(id); }, num_threads);
     submit_task = [&pool](DirectoryId id) { pool.submit(id); };
 
     active_tasks.fetch_add(1, std::memory_order_relaxed);
@@ -226,5 +227,10 @@ auto Scanner::build(const std::filesystem::path& root) -> DirectoryTree
 
 DirectoryTree build_tree(const std::filesystem::path& root)
 {
-    return Scanner{}.build(root);
+    return Scanner{}.build(root, std::jthread::hardware_concurrency());
+}
+
+DirectoryTree build_tree(const std::filesystem::path& root, std::size_t num_threads)
+{
+    return Scanner{}.build(root, num_threads);
 }
