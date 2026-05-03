@@ -1,7 +1,6 @@
 module;
 
 #include <condition_variable>
-#include <limits>
 #include <mutex>
 #include <optional>
 #include <stdexcept>
@@ -35,8 +34,6 @@ class ThreadPool
     std::mutex sleep_guard;
 
     std::stop_source pool_stop;
-    std::atomic<size_t> idle_workers{0};
-    std::atomic<size_t> pending_tasks{0};
     std::vector<std::unique_ptr<Worker>> workers;
 
     Handler handler;
@@ -91,12 +88,8 @@ class ThreadPool
         {
             std::optional<std::size_t> task_id;
 
-            // Try local
-            {
-                task_id = self_worker.tasks.pop_back();
-            }
+            task_id = self_worker.tasks.pop_back();
 
-            // try steal
             if (!task_id.has_value())
             {
                 for (size_t i = 0; i < STEAL_ATTEMPTS && !task_id.has_value(); ++i)
@@ -105,31 +98,24 @@ class ThreadPool
                 }
             }
 
-            // shutdown
             if (!task_id.has_value())
             {
-                // Keep track of idle threads
-                idle_workers.fetch_add(1, std::memory_order_relaxed);
-                {
-                    std::unique_lock lock(sleep_guard);
+                std::unique_lock lock(sleep_guard);
+                condition.wait(lock, [&] {
                     if (st.stop_requested())
-                    {
-                        // no longer a worker
-                        idle_workers.fetch_sub(1, std::memory_order_relaxed);
-                        return;
-                    }
-
-                    condition.wait(
-                        lock,
-                        [&] { return st.stop_requested() || pending_tasks.load(std::memory_order_relaxed) > 0; });
-                }
-                idle_workers.fetch_sub(1, std::memory_order_relaxed);
+                        return true;
+                    for (const auto& w : workers)
+                        if (!w->tasks.empty())
+                            return true;
+                    return false;
+                });
+                if (st.stop_requested())
+                    return;
                 continue;
             }
 
             // EXECUTE
             handler(*task_id);
-            pending_tasks.fetch_sub(1, std::memory_order_relaxed);
         }
     }
 
@@ -146,34 +132,22 @@ class ThreadPool
 
     void submit(std::size_t task_id)
     {
-        pending_tasks.fetch_add(1, std::memory_order_relaxed);
-        if (current_worker_id == no_worker_id)
+        if (pool_stop.stop_requested())
         {
-            // external submit: push directly to worker 0 and wake a sleeper
-            if (pool_stop.stop_requested())
-            {
-                throw std::runtime_error("ThreadPool stopped");
-            }
-            workers[0]->tasks.push_back(task_id);
-            condition.notify_one();
+            throw std::runtime_error("ThreadPool stopped");
         }
-        else
-        {
-            auto& worker = *workers[current_worker_id];
-            if (pool_stop.stop_requested())
-            {
-                throw std::runtime_error("ThreadPool stopped");
-            }
-            worker.tasks.push_back(task_id);
-            size_t local_size = worker.tasks.size();
 
-            // if this local queue we just added a task_id to has more than 2 tasks and we also have idle threads wake
-            // up the idle thread so they can start stealing!!!!!!
-            if (local_size > 1 && idle_workers.load(std::memory_order_relaxed) > 0)
-            {
-                condition.notify_one();
-            }
+        auto& queue = (current_worker_id == no_worker_id) ? workers[0]->tasks
+                                                           : workers[current_worker_id]->tasks;
+
+        // Push under the lock so the predicate always sees the task when it
+        // re-evaluates after a wakeup — the mutex happens-before chain
+        // guarantees visibility without racing on idle-worker counts.
+        {
+            std::lock_guard lock(sleep_guard);
+            queue.push_back(task_id);
         }
+        condition.notify_all();
     }
 
     ~ThreadPool()

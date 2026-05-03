@@ -16,3 +16,8 @@ enable_testing()
 
 add_subdirectory(src)
 add_subdirectory(tests)
+
+option(PHANES_BUILD_BENCHMARKS "Build Google Benchmark benchmarks" OFF)
+if(PHANES_BUILD_BENCHMARKS)
+    add_subdirectory(benchmark)
+endif()
