@@ -65,24 +65,25 @@ class LockFreeDeque
 
     auto push_back(T item) -> void
     {
-        const auto b = back.load(std::memory_order_relaxed); // back is an owned variable by one owner, he alone does
-                                                             // the writes so so relaxed is enough here.
+        const auto b = back.load(std::memory_order_relaxed); // back is an owned variable by one owner, and he alone
+                                                             // does the writes so no need to sync with himself .
 
         const auto f = front.load(
-            std::memory_order_acquire); // front is shared with thieves, so read it with acquire when checking capacity.
+            std::memory_order_acquire); // acq to sync with the thieves that update front, this can be relaxed
 
-        auto* buf = buffer.load(std::memory_order_relaxed);
+        auto* buf = buffer.load(
+            std::memory_order_relaxed); // buffer is only written to by push_back function, so no sync needed
         if (b - f >= buf->capacity)
         {
             auto next = buf->resize(f, b);
             Buffer* next_raw = next.get();
             oldBuffer.push_back(std::move(next));
-            buffer.store(next_raw, std::memory_order_release);
+            buffer.store(next_raw, std::memory_order_release); // sync with other threads that will read this
             buf = next_raw;
         }
 
         buf->data[b & buf->mask] = item;
-        back.store(b + 1, std::memory_order_release); // then publish the new back
+        back.store(b + 1, std::memory_order_release); // we want to observe the write to the buffer data before we store
     }
 
     auto pop_back() noexcept -> std::optional<T>
@@ -91,31 +92,29 @@ class LockFreeDeque
 
         b = b - 1;
         back.store(b, std::memory_order_relaxed);
-        std::atomic_thread_fence(std::memory_order_seq_cst); // storing back needs to happen before loading front
-                                                             // compulsory, so we can compare the  sucessfully
+        std::atomic_thread_fence(std::memory_order_seq_cst);
+
         auto f = front.load(std::memory_order_relaxed);
 
         if (f > b)
         {
-            // if the front has advanced past the back it means that the queue is empty
-            back.store(f, std::memory_order_relaxed); // relaxed because its the owner doing this, and we dont need to
-                                                      // announce that back changed
+            back.store(f, std::memory_order_relaxed); // no real work to made visible to other threads so relaxed
             return std::nullopt;
         }
-        auto* buf = buffer.load(std::memory_order_relaxed);
+        auto* buf = buffer.load(std::memory_order_relaxed); // again here own thread is reading buffer, relaxed is fine
 
-        // if there is one item left, CAS to see who wins the race to pick the last item
+        // last item !!
         if (f == b)
         {
-            // am I the one to change front ??
+            // CAS incase anything has changed since we last read front, maybe some thief has stolen already and we are
+            // empty
             if (!front.compare_exchange_strong(f, f + 1, std::memory_order_seq_cst, std::memory_order_relaxed))
             {
-                // if no, a thief took the last item; restore back to match the new front
-                back.store(f, std::memory_order_relaxed);
+                back.store(f, std::memory_order_relaxed); // no real work to made visible to other threads so relaxed
                 return std::nullopt;
             }
 
-            // if yes then update back
+            // if yes then update back, so back and front are same now since we are empty
             back.store(f + 1, std::memory_order_relaxed);
             return buf->data[b & buf->mask];
         }
@@ -124,13 +123,13 @@ class LockFreeDeque
 
     auto steal_front() noexcept -> std::optional<T>
     {
-        auto f = front.load(std::memory_order_acquire); // front is the shared point for thieves.
+        auto f = front.load(std::memory_order_relaxed); // we have so many thieves os sync with them  but //
         std::atomic_thread_fence(std::memory_order_seq_cst);
-        auto b = back.load(std::memory_order_acquire); // back is the owner's published boundary of available work.
+        auto b = back.load(std::memory_order_acquire); // sync with owner thread
 
         if (f >= b)
         {
-            return std::nullopt; // empty
+            return std::nullopt; // empty, nothing to steal
         }
 
         auto* buf = buffer.load(std::memory_order_relaxed);
@@ -146,8 +145,7 @@ class LockFreeDeque
 
     [[nodiscard]] auto empty() const noexcept -> bool
     {
-        const auto f = front.load(
-            std::memory_order_relaxed); // relaxed: just reading counters, no associated memory to synchronize
+        const auto f = front.load(std::memory_order_relaxed);
         const auto b = back.load(std::memory_order_relaxed);
 
         return f >= b;
@@ -155,9 +153,8 @@ class LockFreeDeque
 
     [[nodiscard]] auto size() const noexcept -> std::size_t
     {
-        const auto f =
-            front.load(std::memory_order_relaxed); // relaxed: result is inherently approximate (two separate loads),
-        const auto b = back.load(std::memory_order_relaxed); //          no acquire-release pair to complete here
+        const auto f = front.load(std::memory_order_relaxed);
+        const auto b = back.load(std::memory_order_relaxed);
         return (b > f) ? static_cast<std::size_t>(b - f) : 0;
     }
 
