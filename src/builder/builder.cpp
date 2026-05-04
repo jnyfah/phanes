@@ -6,8 +6,8 @@ module;
 #include <mutex>
 #include <shared_mutex>
 #include <system_error>
-#include <vector>
 #include <thread>
+#include <vector>
 
 module builder;
 
@@ -166,11 +166,8 @@ void Scanner::scan_directory(DirectoryId id)
         }
     }
 
-    const int prev = active_tasks.fetch_sub(1, std::memory_order_acq_rel);
-    if (prev == 1)
-    {
-        active_tasks.notify_one();
-    }
+    active_tasks.fetch_sub(1, std::memory_order_acq_rel);
+    active_tasks.notify_one();
 }
 
 auto Scanner::build(const std::filesystem::path& root, std::size_t num_threads) -> DirectoryTree
@@ -211,7 +208,7 @@ auto Scanner::build(const std::filesystem::path& root, std::size_t num_threads) 
     tree.directories.push_back(root_node);
     tree.root = root_node.id;
 
-     ThreadPool pool([this](DirectoryId id) { scan_directory(id); }, num_threads);
+    ThreadPool pool([this](DirectoryId id) { scan_directory(id); }, num_threads);
     submit_task = [&pool](DirectoryId id) { pool.submit(id); };
 
     active_tasks.fetch_add(1, std::memory_order_release);

@@ -131,8 +131,12 @@ class ThreadPool
         workers.reserve(threads);
         for (size_t i = 0; i < threads; ++i)
         {
-            auto& w = workers.emplace_back(std::make_unique<Worker>());
-            w->thread = std::jthread([this, i, st = pool_stop.get_token()] { worker_loop(st, i); });
+            workers.emplace_back(std::make_unique<Worker>());
+        }
+
+        for (size_t i = 0; i < threads; ++i)
+        {
+            workers[i]->thread = std::jthread([this, i, st = pool_stop.get_token()] { worker_loop(st, i); });
         }
     }
 
@@ -158,7 +162,10 @@ class ThreadPool
 
     ~ThreadPool()
     {
-        pool_stop.request_stop();
+        {
+            std::lock_guard lock(sleep_guard);
+            pool_stop.request_stop();
+        }
         condition.notify_all();
         for (const auto& w : workers)
         {
