@@ -1,6 +1,7 @@
 module;
 
 #include <condition_variable>
+#include <cstddef>
 #include <mutex>
 #include <optional>
 #include <stdexcept>
@@ -88,7 +89,10 @@ class ThreadPool
         {
             std::optional<std::size_t> task_id;
 
-            task_id = self_worker.tasks.pop_back();
+            {
+                std::lock_guard lock(sleep_guard);
+                task_id = self_worker.tasks.pop_back();
+            }
 
             if (!task_id.has_value())
             {
@@ -101,14 +105,16 @@ class ThreadPool
             if (!task_id.has_value())
             {
                 std::unique_lock lock(sleep_guard);
-                condition.wait(lock, [&] {
-                    if (st.stop_requested())
-                        return true;
-                    for (const auto& w : workers)
-                        if (!w->tasks.empty())
-                            return true;
-                    return false;
-                });
+                condition.wait(lock,
+                               [&]
+                               {
+                                   if (st.stop_requested())
+                                       return true;
+                                   for (const auto& w : workers)
+                                       if (!w->tasks.empty())
+                                           return true;
+                                   return false;
+                               });
                 if (st.stop_requested())
                     return;
                 continue;
@@ -137,8 +143,8 @@ class ThreadPool
             throw std::runtime_error("ThreadPool stopped");
         }
 
-        auto& queue = (current_worker_id == no_worker_id) ? workers[0]->tasks
-                                                           : workers[current_worker_id]->tasks;
+        const size_t target = (current_worker_id == no_worker_id) ? 0 : current_worker_id;
+        auto& queue = workers[target]->tasks;
 
         // Push under the lock so the predicate always sees the task when it
         // re-evaluates after a wakeup — the mutex happens-before chain

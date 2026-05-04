@@ -118,7 +118,7 @@ void Scanner::scan_directory(DirectoryId id)
     // flush all subdir, one lock acquisition per directory scan
     if (!local_dirs.empty())
     {
-        active_tasks.fetch_add(local_dirs.size(), std::memory_order_relaxed);
+        active_tasks.fetch_add(static_cast<int>(local_dirs.size()), std::memory_order_release);
         std::vector<DirectoryId> new_dir_ids;
         new_dir_ids.reserve(local_dirs.size());
         {
@@ -166,7 +166,8 @@ void Scanner::scan_directory(DirectoryId id)
         }
     }
 
-    if (active_tasks.fetch_sub(1, std::memory_order_release) == 1)
+    const int prev = active_tasks.fetch_sub(1, std::memory_order_acq_rel);
+    if (prev == 1)
     {
         active_tasks.notify_one();
     }
@@ -213,12 +214,12 @@ auto Scanner::build(const std::filesystem::path& root, std::size_t num_threads) 
      ThreadPool pool([this](DirectoryId id) { scan_directory(id); }, num_threads);
     submit_task = [&pool](DirectoryId id) { pool.submit(id); };
 
-    active_tasks.fetch_add(1, std::memory_order_relaxed);
+    active_tasks.fetch_add(1, std::memory_order_release);
 
     submit_task(tree.root.value());
 
     int expected;
-    while ((expected = active_tasks.load(std::memory_order_relaxed)) != 0)
+    while ((expected = active_tasks.load(std::memory_order_acquire)) != 0)
     {
         active_tasks.wait(expected);
     }
