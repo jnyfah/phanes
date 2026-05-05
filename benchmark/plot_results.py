@@ -138,16 +138,6 @@ def style_count_axis(ax: plt.Axes, decimals: int = 2) -> None:
     ax.yaxis.set_major_formatter(_human_fmt(decimals))
 
 
-def annotate_bars(ax: plt.Axes, bars, values: list[float]) -> None:
-    for bar, v in zip(bars, values):
-        ax.text(
-            bar.get_x() + bar.get_width() / 2,
-            bar.get_height() * 1.02,
-            f"{v:.3f}",
-            ha="center", va="bottom", fontsize=10,
-        )
-
-
 def save_fig(fig: plt.Figure, dest: Path, *, rect=(0, 0, 1, 1)) -> None:
     fig.tight_layout(rect=rect)
     fig.savefig(dest, dpi=DPI, bbox_inches="tight")
@@ -158,106 +148,6 @@ def save_fig(fig: plt.Figure, dest: Path, *, rect=(0, 0, 1, 1)) -> None:
 # ---------------------------------------------------------------------------
 # Plot generators
 # ---------------------------------------------------------------------------
-
-def plot_analyzer_scalability(grouped: dict, out: Path) -> None:
-    keys = [
-        "BM_FileStats", "BM_DirectoryMetrics", "BM_EmptyDirs",
-        "BM_ExtensionStats", "BM_RecentFiles", "BM_Summary", "BM_DirectoryStats",
-    ]
-    series: dict[str, tuple[list[int], list[float]]] = {}
-    for key in keys:
-        pts = collect_pts(grouped, key)
-        if pts:
-            series[key.replace("BM_", "")] = ([p[0] for p in pts], [p[1] for p in pts])
-    if not series:
-        return
-
-    divisor, unit = best_unit([v for _, ys in series.values() for v in ys])
-    fig, ax = plt.subplots(figsize=(11, 6))
-    for i, (label, (xs, ys)) in enumerate(series.items()):
-        ax.plot(xs, [y / divisor for y in ys], marker="o", markersize=7,
-                linewidth=2.5, color=TAB10[i % 10], label=label)
-    ax.legend(framealpha=0.9, ncols=2)
-    style_axes(ax, "Analyzer — Algorithm Scalability", "Number of directories", f"Time ({unit})")
-    style_time_axis(ax)
-    save_fig(fig, out / "analyzer_scalability.png")
-
-
-def plot_topn_performance(grouped: dict, out: Path) -> None:
-    series: dict[str, tuple[list[int], list[float]]] = {}
-    for key in ("BM_LargestNFiles", "BM_LargestNDirs"):
-        pts = collect_pts(grouped, key)
-        if pts:
-            series[key.replace("BM_", "")] = ([p[0] for p in pts], [p[1] for p in pts])
-    if not series:
-        return
-
-    divisor, unit = best_unit([v for _, ys in series.values() for v in ys])
-    fig, ax = plt.subplots(figsize=(9.5, 5.8))
-    for i, (label, (xs, ys)) in enumerate(series.items()):
-        ax.plot(xs, [y / divisor for y in ys], marker="o", markersize=7,
-                linewidth=2.5, color=TAB10[i % 10], label=label)
-    ax.legend(framealpha=0.9)
-    style_axes(ax, "Analyzer — Top-N Query Performance", "N (number of results)", f"Time ({unit})")
-    style_time_axis(ax)
-    save_fig(fig, out / "topn_performance.png")
-
-
-def plot_builder_scheduler(grouped: dict, out: Path) -> None:
-    needed = any(k in grouped for k in (
-        "BM_BuildTree_ThreadOverhead", "BM_BuildTree_Granularity",
-        "BM_BuildTree_Flat", "BM_BuildTree_Nested",
-        "BM_BuildTree_Balanced", "BM_BuildTree_Skewed",
-    ))
-    if not needed:
-        return
-
-    fig, axes = plt.subplots(2, 2, figsize=(13.5, 9))
-    fig.suptitle("Builder — Parallel Scanner Scheduler Analysis", fontsize=16, fontweight="bold", y=0.98)
-    (ax_overhead, ax_granularity), (ax_topology, ax_skew) = axes
-
-    for ax, key, marker, color, title, xlabel in (
-        (ax_overhead,    "BM_BuildTree_ThreadOverhead", "o", TAB10[2], "A. Thread-Pool Overhead Floor", "Directories (1 file each)"),
-        (ax_granularity, "BM_BuildTree_Granularity",    "s", TAB10[4], "B. Task-Granularity Sweep",     "Directories / tasks"),
-    ):
-        pts = collect_pts(grouped, key)
-        if pts:
-            divisor, unit = best_unit([p[1] for p in pts])
-            ax.plot([p[0] for p in pts], [p[1] / divisor for p in pts],
-                    marker=marker, markersize=7, color=color, linewidth=2.5)
-            style_axes(ax, title, xlabel, f"Time ({unit})")
-            style_time_axis(ax)
-
-    for ax, entries, title, xlabel in (
-        (ax_topology, [
-            ("BM_BuildTree_Flat",   TAB10[0], "Flat\n(all tasks at start)"),
-            ("BM_BuildTree_Nested", TAB10[1], "Nested\n(tasks emerge in waves)"),
-        ], "C. Static vs Dynamic Task Generation", "Tree topology"),
-        (ax_skew, [
-            ("BM_BuildTree_Balanced", TAB10[0], "Balanced\n(100 dirs × 100 files)"),
-            ("BM_BuildTree_Skewed",   TAB10[5], "Skewed\n(1 dir × 800 files\n+ 100 dirs × 2 files)"),
-        ], "D. Balanced vs Skewed Workload", "Workload distribution"),
-    ):
-        labels, vals, colors = [], [], []
-        for key, color, label in entries:
-            rows = grouped.get(key, [])
-            if rows:
-                labels.append(label)
-                vals.append(float(np.median([to_ns(b) for b in rows])))
-                colors.append(color)
-        if vals:
-            divisor, unit = best_unit(vals)
-            norm = [v / divisor for v in vals]
-            x = np.arange(len(labels))
-            bars = ax.bar(x, norm, color=colors, width=0.5, edgecolor="white", zorder=3)
-            ax.set_xticks(x)
-            ax.set_xticklabels(labels)
-            annotate_bars(ax, bars, norm)
-            style_axes(ax, title, xlabel, f"Median time ({unit})")
-            style_time_axis(ax, 3)
-
-    save_fig(fig, out / "builder_scheduler.png", rect=(0, 0, 1, 0.96))
-
 
 def plot_thread_scaling(grouped: dict, out: Path) -> None:
     pts = collect_pts(grouped, "BM_BuildTree_ThreadScaling")
@@ -329,34 +219,6 @@ def plot_deque_microbench(grouped: dict, out: Path) -> None:
         style_count_axis(ax_steal, 4)
 
     save_fig(fig, out / "deque_microbench.png", rect=(0, 0, 1, 0.96))
-
-
-def plot_false_sharing(grouped: dict, out: Path) -> None:
-    entries = [
-        ("BM_FalseSharing_Packed", "Packed", TAB10[3]),
-        ("BM_FalseSharing_Padded", "Padded", TAB10[2]),
-    ]
-    labels, vals, colors = [], [], []
-    for key, label, color in entries:
-        rows = grouped.get(key, [])
-        if rows:
-            labels.append(label)
-            vals.append(median_ns(rows))
-            colors.append(color)
-    if not vals:
-        return
-
-    divisor, unit = best_unit(vals)
-    norm = [v / divisor for v in vals]
-    fig, ax = plt.subplots(figsize=(7.5, 5.5))
-    x = np.arange(len(labels))
-    bars = ax.bar(x, norm, color=colors, width=0.55, edgecolor="white", zorder=3)
-    ax.set_xticks(x)
-    ax.set_xticklabels(labels)
-    annotate_bars(ax, bars, norm)
-    style_axes(ax, "False Sharing Benchmark", "Counter layout", f"Median time ({unit})")
-    style_time_axis(ax, 3)
-    save_fig(fig, out / "false_sharing.png")
 
 
 def plot_overview(grouped: dict, out: Path) -> None:
@@ -437,12 +299,8 @@ def main() -> None:
 
     print("\nGenerating charts …")
     plot_overview(grouped, out)
-    plot_analyzer_scalability(grouped, out)
-    plot_topn_performance(grouped, out)
-    plot_builder_scheduler(grouped, out)
     plot_thread_scaling(grouped, out)
     plot_deque_microbench(grouped, out)
-    plot_false_sharing(grouped, out)
     print(f"\nDone. Open {out}/ to view the charts.")
 
 

@@ -54,7 +54,7 @@ The binary is placed in `build/<preset>/phanes` (or `phanes.exe` on Windows).
 phanes <path> [flags...]
 ```
 
-At least one flag is required. Multiple flags can be combined freely — each report is computed concurrently and printed in the order the flags were given.
+At least one flag is required. Multiple flags can be combined freely and each report is computed concurrently and printed in the order the flags were given.
 
 ### Flags
 
@@ -109,7 +109,7 @@ cmake --preset ninja-release && cmake --build --preset ninja-release
     --benchmark_out_format=json
 ```
 
-### Plotting
+### Plotting (optional)
 
 Requires Python 3 with `matplotlib` and `numpy`:
 
@@ -118,14 +118,11 @@ pip install matplotlib numpy
 python3 benchmark/plot_results.py results.json --out benchmark_plots
 ```
 
-Produces six charts in `benchmark_plots/`:
+Produces three charts in `benchmark_plots/`:
 
 | File | What it shows |
 |---|---|
 | `overview.png` | All benchmarks on a single log-scale bar chart |
-| `analyzer_scalability.png` | Per-algorithm time vs directory count |
-| `topn_performance.png` | Top-N file/dir query time vs N |
-| `builder_scheduler.png` | Thread-pool overhead, granularity, topology, and skew (2×2 panel) |
 | `thread_scaling.png` | Scan time and throughput vs thread count with ideal-linear reference |
 | `deque_microbench.png` | Owner push+pop throughput and contention impact |
 
