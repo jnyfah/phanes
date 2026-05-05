@@ -212,12 +212,11 @@ auto Scanner::build(const std::filesystem::path& root, std::size_t num_threads) 
     tree.directories.push_back(root_node);
     tree.root = root_node.id;
 
-    ThreadPool pool([this](DirectoryId id) { scan_directory(id); }, num_threads);
-    submit_task = [&pool](DirectoryId id) { pool.submit(id); };
-
     active_tasks.fetch_add(1, std::memory_order_release);
 
-    submit_task(tree.root.value());
+    ThreadPool pool([this](DirectoryId id) { scan_directory(id); }, num_threads);
+    submit_task = [&pool](DirectoryId id) { pool.submit(id); };
+    pool.start(tree.root.value());
 
     // main thread sleeps until there is a fetch sub, wakes up to check if we are done scanning
     int expected;

@@ -4,7 +4,6 @@ module;
 #include <cstddef>
 #include <mutex>
 #include <optional>
-#include <stdexcept>
 #include <thread>
 #include <vector>
 
@@ -90,10 +89,7 @@ class ThreadPool
             std::optional<std::size_t> task_id;
 
             // Try local
-            {
-                std::lock_guard lock(sleep_guard);
-                task_id = self_worker.tasks.pop_back();
-            }
+            task_id = self_worker.tasks.pop_back();
 
             // try steal
             if (!task_id.has_value())
@@ -144,22 +140,27 @@ class ThreadPool
         {
             workers.emplace_back(std::make_unique<Worker>());
         }
+    }
 
-        for (size_t i = 0; i < threads; ++i)
+    // Seed initial task before worker threads start executing,
+    // so deque ownership rules (single-owner push/pop) are not violated.
+    void start(std::size_t initial_task)
+    {
+        workers[0]->tasks.push_back(initial_task);
+        for (size_t id = 0; id < workers.size(); ++id)
         {
-            workers[i]->thread = std::jthread([this, id = i] { current_worker_id = id; worker_loop(pool_stop.get_token()); });
+            workers[id]->thread = std::jthread(
+                [this, id]
+                {
+                    current_worker_id = id;
+                    worker_loop(pool_stop.get_token());
+                });
         }
     }
 
     void submit(std::size_t task_id)
     {
-        if (pool_stop.stop_requested())
-        {
-            throw std::runtime_error("ThreadPool stopped");
-        }
-
-        const size_t target = (current_worker_id == no_worker_id) ? 0 : current_worker_id;
-        auto& queue = workers[target]->tasks;
+        auto& queue = workers[current_worker_id]->tasks;
         {
             std::lock_guard lock(sleep_guard);
             queue.push_back(task_id);
