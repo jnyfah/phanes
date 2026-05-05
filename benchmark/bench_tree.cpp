@@ -5,7 +5,6 @@
 #include <filesystem>
 #include <format>
 #include <fstream>
-#include <string>
 #include <thread>
 #include <vector>
 
@@ -27,7 +26,7 @@ fs::path make_unique_bench_path(std::string_view stem)
 {
     const auto now = std::chrono::steady_clock::now().time_since_epoch().count();
     return fs::temp_directory_path() /
-        std::format("{}_{}_{}",  stem, now, std::hash<std::thread::id>{}(std::this_thread::get_id()));
+        std::format("{}_{}_{}", stem, now, std::hash<std::thread::id>{}(std::this_thread::get_id()));
 }
 
 } // namespace
@@ -380,7 +379,7 @@ static void BM_BuildTree_ThreadScaling(benchmark::State& state)
         benchmark::DoNotOptimize(build_tree(root, num_threads));
 
     state.SetItemsProcessed(state.iterations() * 10000);
-    state.SetLabel(std::to_string(num_threads) + " thread(s)");
+    state.SetLabel(std::format("{} thread(s)", num_threads));
 
     fs::remove_all(root);
 }
