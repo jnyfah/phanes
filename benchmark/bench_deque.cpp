@@ -189,14 +189,14 @@ BENCHMARK(BM_Deque_PushPop_Steady)->Arg(64)->Arg(512)->Arg(4096)->Unit(benchmark
 // Thread creation is excluded from timed measurement.
 static void BM_Deque_StealContention(benchmark::State& state)
 {
-    const int num_thieves = static_cast<int>(state.range(0));
+    const auto num_thieves = static_cast<int>(state.range(0));
     constexpr std::size_t N = 512;
 
     BenchLockFreeDeque<std::size_t> deque;
-    std::atomic<bool> start{false};
-    std::atomic<bool> stop{false};
+    std::atomic start{false};
+    std::atomic stop{false};
 
-    std::vector<std::thread> thieves;
+    std::vector<std::jthread> thieves;
     thieves.reserve(static_cast<std::size_t>(num_thieves));
 
     for (int t = 0; t < num_thieves; ++t)
@@ -251,7 +251,7 @@ struct PaddedCounters
 };
 
 template <typename Counters>
-static void run_false_sharing_bench(benchmark::State& state)
+void run_false_sharing_bench(benchmark::State& state)
 {
     constexpr std::size_t iters = 1'000'000;
 
@@ -259,13 +259,13 @@ static void run_false_sharing_bench(benchmark::State& state)
     {
         Counters counters{};
 
-        std::thread t1(
+        std::jthread t1(
             [&]()
             {
                 for (std::size_t i = 0; i < iters; ++i)
                     counters.a.fetch_add(1, std::memory_order_relaxed);
             });
-        std::thread t2(
+        std::jthread t2(
             [&]()
             {
                 for (std::size_t i = 0; i < iters; ++i)
