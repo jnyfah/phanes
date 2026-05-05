@@ -11,7 +11,7 @@ Phanes is a fast, multithreaded command-line tool for analyzing filesystem struc
 
 - Parallel directory scanning via a lock-free work-stealing thread pool
 - Concurrent action dispatch: multiple report types computed simultaneously
-- benchmark ?????
+- Google Benchmark suite covering the analyzer, parallel scanner, and lock-free deque
 
 ---
 
@@ -54,7 +54,7 @@ The binary is placed in `build/<preset>/phanes` (or `phanes.exe` on Windows).
 phanes <path> [flags...]
 ```
 
-At least one flag is required. Multiple flags can be combined freely — each report is computed concurrently and printed in the order the flags were given.
+At least one flag is required. Multiple flags can be combined freely and each report is computed concurrently and printed in the order the flags were given.
 
 ### Flags
 
@@ -86,6 +86,45 @@ phanes /var/log --recent 1h --errors
 # Full report
 phanes /srv --summary --largest-files 20 --largest-dirs 10 --extensions --metrics --stats
 ```
+
+---
+
+## Benchmarks
+
+The benchmark suite uses [Google Benchmark](https://github.com/google/benchmark) and covers three areas:
+
+- **Analyzer** — scalability of each analysis algorithm (file stats, directory metrics, extension breakdown, recent files, top-N queries, summary) as directory count grows
+- **Builder** — parallel scanner performance across thread counts, task granularities, flat vs nested trees, and balanced vs skewed workloads
+- **LockFreeDeque** — raw push/pop throughput and owner performance under concurrent steal contention
+
+### Running
+
+```bash
+# Build in release mode first
+cmake --preset ninja-release && cmake --build --preset ninja-release
+
+# Run and save results as JSON
+./build/ninja-release/benchmark/phanes_bench \
+    --benchmark_out=results.json \
+    --benchmark_out_format=json
+```
+
+### Plotting (optional)
+
+Requires Python 3 with `matplotlib` and `numpy`:
+
+```bash
+pip install matplotlib numpy
+python3 benchmark/plot_results.py results.json --out benchmark_plots
+```
+
+Produces three charts in `benchmark_plots/`:
+
+| File | What it shows |
+|---|---|
+| `overview.png` | All benchmarks on a single log-scale bar chart |
+| `thread_scaling.png` | Scan time and throughput vs thread count with ideal-linear reference |
+| `deque_microbench.png` | Owner push+pop throughput and contention impact |
 
 ---
 

@@ -6,14 +6,16 @@ module;
 #include <mutex>
 #include <shared_mutex>
 #include <system_error>
+#include <thread>
 #include <vector>
+
 module builder;
 
 import :scheduler;
 
 struct Scanner
 {
-    auto build(const std::filesystem::path& root) -> DirectoryTree;
+    auto build(const std::filesystem::path& root, std::size_t num_threads) -> DirectoryTree;
 
   private:
     void scan_directory(DirectoryId id);
@@ -21,7 +23,8 @@ struct Scanner
     DirectoryTree tree;
     std::shared_mutex dir_mutex; // shared for reads/per-node writes, exclusive for push_back
     std::mutex guard; // exclusive for tree.files and tree.errors
-    std::atomic_int active_tasks{0};
+    std::atomic_int active_tasks{
+        0}; // counter of how many directory scans are currently in flight, we use to know when w are done scanning
     std::atomic<DirectoryId> next_dir_id{0};
     std::atomic<FileId> next_file_id{0};
     std::function<void(DirectoryId)> submit_task;
@@ -116,7 +119,7 @@ void Scanner::scan_directory(DirectoryId id)
     // flush all subdir, one lock acquisition per directory scan
     if (!local_dirs.empty())
     {
-        active_tasks.fetch_add(local_dirs.size(), std::memory_order_relaxed);
+        active_tasks.fetch_add(static_cast<int>(local_dirs.size()), std::memory_order_release);
         std::vector<DirectoryId> new_dir_ids;
         new_dir_ids.reserve(local_dirs.size());
         {
@@ -154,7 +157,7 @@ void Scanner::scan_directory(DirectoryId id)
         }
     }
 
-    // update this directory's file list
+    // update this directory's file list, shared lock here is fine,no two threads ever touch same id
     if (!local_file_ids.empty())
     {
         std::shared_lock lock(dir_mutex);
@@ -164,14 +167,14 @@ void Scanner::scan_directory(DirectoryId id)
         }
     }
 
-    if (active_tasks.fetch_sub(1, std::memory_order_release) == 1)
-    {
-        active_tasks.notify_one();
-    }
+    // a writes before this should be visible since we use this to determine if we are done scanning
+    active_tasks.fetch_sub(1, std::memory_order_acq_rel);
+    active_tasks.notify_one();
 }
 
-auto Scanner::build(const std::filesystem::path& root) -> DirectoryTree
+auto Scanner::build(const std::filesystem::path& root, std::size_t num_threads) -> DirectoryTree
 {
+    // start time
     tree.scan_started = std::chrono::floor<std::chrono::seconds>(std::chrono::system_clock::now());
 
     auto finish = [&]() -> DirectoryTree
@@ -181,6 +184,7 @@ auto Scanner::build(const std::filesystem::path& root) -> DirectoryTree
     };
 
     std::error_code ec;
+    // absolute path that has no dot element
     const auto normalizedRoot = std::filesystem::weakly_canonical(root, ec);
 
     if (ec && ec != std::errc::permission_denied)
@@ -208,15 +212,16 @@ auto Scanner::build(const std::filesystem::path& root) -> DirectoryTree
     tree.directories.push_back(root_node);
     tree.root = root_node.id;
 
-    ThreadPool pool([this](DirectoryId id) { scan_directory(id); });
+    active_tasks.fetch_add(1, std::memory_order_release);
+
+    ThreadPool pool([this](DirectoryId id) { scan_directory(id); }, num_threads);
     submit_task = [&pool](DirectoryId id) { pool.submit(id); };
+    pool.start(tree.root.value());
 
-    active_tasks.fetch_add(1, std::memory_order_relaxed);
-
-    submit_task(tree.root.value());
-
+    // main thread sleeps until there is a fetch sub, wakes up to check if we are done scanning
     int expected;
-    while ((expected = active_tasks.load(std::memory_order_relaxed)) != 0)
+    // pairs with the release on fetch sub
+    while ((expected = active_tasks.load(std::memory_order_acquire)) != 0)
     {
         active_tasks.wait(expected);
     }
@@ -226,5 +231,10 @@ auto Scanner::build(const std::filesystem::path& root) -> DirectoryTree
 
 DirectoryTree build_tree(const std::filesystem::path& root)
 {
-    return Scanner{}.build(root);
+    return Scanner{}.build(root, std::jthread::hardware_concurrency());
+}
+
+DirectoryTree build_tree(const std::filesystem::path& root, std::size_t num_threads)
+{
+    return Scanner{}.build(root, num_threads);
 }
