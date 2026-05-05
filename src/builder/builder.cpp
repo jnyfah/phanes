@@ -23,7 +23,8 @@ struct Scanner
     DirectoryTree tree;
     std::shared_mutex dir_mutex; // shared for reads/per-node writes, exclusive for push_back
     std::mutex guard; // exclusive for tree.files and tree.errors
-    std::atomic_int active_tasks{0};
+    std::atomic_int active_tasks{
+        0}; // counter of how many directory scans are currently in flight, we use to know when w are done scanning
     std::atomic<DirectoryId> next_dir_id{0};
     std::atomic<FileId> next_file_id{0};
     std::function<void(DirectoryId)> submit_task;
@@ -156,7 +157,7 @@ void Scanner::scan_directory(DirectoryId id)
         }
     }
 
-    // update this directory's file list
+    // update this directory's file list, shared lock here is fine,no two threads ever touch same id
     if (!local_file_ids.empty())
     {
         std::shared_lock lock(dir_mutex);
@@ -166,12 +167,14 @@ void Scanner::scan_directory(DirectoryId id)
         }
     }
 
+    // a writes before this should be visible since we use this to determine if we are done scanning
     active_tasks.fetch_sub(1, std::memory_order_acq_rel);
     active_tasks.notify_one();
 }
 
 auto Scanner::build(const std::filesystem::path& root, std::size_t num_threads) -> DirectoryTree
 {
+    // start time
     tree.scan_started = std::chrono::floor<std::chrono::seconds>(std::chrono::system_clock::now());
 
     auto finish = [&]() -> DirectoryTree
@@ -181,6 +184,7 @@ auto Scanner::build(const std::filesystem::path& root, std::size_t num_threads) 
     };
 
     std::error_code ec;
+    // absolute path that has no dot element
     const auto normalizedRoot = std::filesystem::weakly_canonical(root, ec);
 
     if (ec && ec != std::errc::permission_denied)
@@ -215,7 +219,9 @@ auto Scanner::build(const std::filesystem::path& root, std::size_t num_threads) 
 
     submit_task(tree.root.value());
 
+    // main thread sleeps until there is a fetch sub, wakes up to check if we are done scanning
     int expected;
+    // pairs with the release on fetch sub
     while ((expected = active_tasks.load(std::memory_order_acquire)) != 0)
     {
         active_tasks.wait(expected);

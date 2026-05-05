@@ -78,9 +78,9 @@ class ThreadPool
         return std::nullopt;
     }
 
-    void worker_loop(std::stop_token st, size_t id)
+    void worker_loop(std::stop_token st)
     {
-        current_worker_id = id;
+        const size_t id = current_worker_id;
         constexpr size_t STEAL_ATTEMPTS = 64;
         Worker& self_worker = *workers[id];
         size_t steal_start_counter = 0;
@@ -89,11 +89,13 @@ class ThreadPool
         {
             std::optional<std::size_t> task_id;
 
+            // Try local
             {
                 std::lock_guard lock(sleep_guard);
                 task_id = self_worker.tasks.pop_back();
             }
 
+            // try steal
             if (!task_id.has_value())
             {
                 for (size_t i = 0; i < STEAL_ATTEMPTS && !task_id.has_value(); ++i)
@@ -102,6 +104,7 @@ class ThreadPool
                 }
             }
 
+            // no task
             if (!task_id.has_value())
             {
                 std::unique_lock lock(sleep_guard);
@@ -109,14 +112,22 @@ class ThreadPool
                                [&]
                                {
                                    if (st.stop_requested())
+                                   {
                                        return true;
+                                   }
                                    for (const auto& w : workers)
+                                   {
                                        if (!w->tasks.empty())
+                                       {
                                            return true;
+                                       }
+                                   }
                                    return false;
                                });
                 if (st.stop_requested())
+                {
                     return;
+                }
                 continue;
             }
 
@@ -126,7 +137,7 @@ class ThreadPool
     }
 
   public:
-    explicit ThreadPool(Handler hand, size_t threads = std::jthread::hardware_concurrency()) : handler(std::move(hand))
+    explicit ThreadPool(Handler hand, size_t threads) : handler(std::move(hand))
     {
         workers.reserve(threads);
         for (size_t i = 0; i < threads; ++i)
@@ -136,7 +147,7 @@ class ThreadPool
 
         for (size_t i = 0; i < threads; ++i)
         {
-            workers[i]->thread = std::jthread([this, i, st = pool_stop.get_token()] { worker_loop(st, i); });
+            workers[i]->thread = std::jthread([this, id = i] { current_worker_id = id; worker_loop(pool_stop.get_token()); });
         }
     }
 
@@ -149,15 +160,11 @@ class ThreadPool
 
         const size_t target = (current_worker_id == no_worker_id) ? 0 : current_worker_id;
         auto& queue = workers[target]->tasks;
-
-        // Push under the lock so the predicate always sees the task when it
-        // re-evaluates after a wakeup — the mutex happens-before chain
-        // guarantees visibility without racing on idle-worker counts.
         {
             std::lock_guard lock(sleep_guard);
             queue.push_back(task_id);
         }
-        condition.notify_all();
+        condition.notify_one();
     }
 
     ~ThreadPool()
