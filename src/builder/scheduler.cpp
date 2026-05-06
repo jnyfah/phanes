@@ -9,7 +9,7 @@ module;
 
 module builder:scheduler;
 
-import :deque;
+import phanes_deque;
 
 struct Worker
 {

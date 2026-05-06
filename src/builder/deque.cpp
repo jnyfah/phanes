@@ -9,15 +9,14 @@ module;
 #include <type_traits>
 #include <vector>
 
-module builder:deque;
+export module phanes_deque;
 
 // Typename T here is a trival type of DirectorId (size_t) defined in core, so this deque would only work for trivial
 // types
-
-template <typename T>
+export template <typename T>
 concept DequeElement = std::is_trivially_copyable_v<T> && std::is_trivially_destructible_v<T>;
 
-template <DequeElement T>
+export template <DequeElement T>
 class LockFreeDeque
 {
 
