@@ -49,6 +49,30 @@
     }
   ],
 
+  "testPresets": [
+    {
+      "name": "ninja-debug",
+      "configurePreset": "ninja-debug",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "ninja-release",
+      "configurePreset": "ninja-release",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "CI-clang19",
+      "configurePreset": "CI-clang19",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "msvc-release",
+      "configurePreset": "msvc-release",
+      "configuration": "Release",
+      "output": { "outputOnFailure": true }
+    }
+  ],
+
   "buildPresets": [
     {
       "name": "ninja-debug",

@@ -32,6 +32,7 @@ struct TempDir
         {
             path = fs::temp_directory_path() / std::format("phanes_test_{:016x}", dist(rd));
         } while (!fs::create_directory(path));
+        path = fs::weakly_canonical(path);
     }
 
     ~TempDir()
