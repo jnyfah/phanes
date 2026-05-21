@@ -16,6 +16,7 @@ target_sources(phanes_core
   PRIVATE
       builder/builder.cpp
       analyzer/analyzer.cpp
+      analyzer/duplicates.cpp
       parser/parser.cpp
       view/view.cpp
 )

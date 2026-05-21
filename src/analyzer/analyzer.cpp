@@ -268,3 +268,35 @@ DirectoryStats compute_directory_stats(const DirectoryTree& tree, const Director
 
     return stats;
 }
+
+std::vector<DuplicateGroup> group_files_by_size(const DirectoryTree& tree)
+{
+    // readable files
+    std::vector<FileId> ids;
+    for (const auto file : tree.files)
+    {
+        if (file.readable && !file.is_symlink && file.size > 0)
+        {
+            ids.push_back(file.id);
+        }
+    }
+
+    // sort
+    std::ranges::sort(ids, {}, [&](FileId id) { return tree.files[id].size; });
+
+    // group
+    std::vector<DuplicateGroup> result;
+
+    for (auto chunk : ids | std::views::chunk_by([&](FileId a, FileId b){
+            return tree.files[a].size == tree.files[b].size; }))
+    {
+        auto group = std::ranges::to<std::vector>(chunk);
+        if (group.size() >= 2)
+        {
+            result.push_back({ tree.files[group[0]].size, std::move(group) });
+        }
+    }
+
+    return result;
+
+}

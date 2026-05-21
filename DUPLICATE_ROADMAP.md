@@ -314,3 +314,57 @@ land just after the theory, so you implement the concept while it is fresh.
 - No new fields on `FileNode` or `DirectoryTree`
 - New test file covers at minimum: empty directory, no duplicates, one duplicate
   pair, all files identical
+
+
+
+
+
+
+Skip entirely (for now)
+Ch 2 — bits, integers, floats. Not needed for anything you're building.
+Ch 3 — assembly/machine code. Fascinating later, irrelevant now.
+Ch 4 — processor architecture. Save this for when you start the FPGA.
+Ch 7 — linking. Not relevant to duplicate scanner.
+Ch 11 — network programming. Skip.
+Read in this order instead
+Ch 6 — The Memory Hierarchy → read this first, read it now.
+
+This is the reason you bought the book. Cache lines, locality, the memory mountain, why buffer sizes matter, why sequential reads are fast. Everything you experienced writing the deque and everything you're about to experience hashing files — it's all explained here. This chapter alone is worth the price.
+
+Ch 10 — System-Level I/O → read before Checkpoint 2.
+
+File descriptors, read(), kernel buffers, what actually happens when you open and read a file. Directly applies to hash_file().
+
+Ch 5 — Optimizing Program Performance → read alongside Ch 6.
+
+Covers how compilers optimize, loop unrolling, and why memory access patterns dominate performance. Short and practical.
+
+Ch 12 — Concurrent Programming → read before Checkpoint 4.
+
+Threads, mutexes, semaphores, races. You've already used all of these — this gives you the formal model behind what you built in the scheduler.
+
+Ch 9 — Virtual Memory (just 9.1–9.3) → read before Checkpoint 5.
+
+Explains why the OS page is 4 KB and why that matters for partial hashing. You don't need the whole chapter — stop at 9.4.
+
+Your reading order
+
+Ch 6  →  Ch 5  →  Ch 10  →  Ch 12  →  Ch 9 (9.1–9.3 only)
+That's roughly 250 pages total instead of 1000, and every page directly connects to something you're building. Ch 4 comes back when you start the FPGA — it covers exactly how a processor pipeline is built, which is what you'll implement in Harris & Harris.
+
+
+
+What "optimized for this project" actually means here:
+
+A general hash function like xxHash handles any input. Your use case has constraints you can exploit:
+
+You're always reading from disk sequentially — your hash can be designed around streaming chunks, not random access
+You hash many files back-to-back — you can reuse a persistent state object instead of reinitializing per file, avoiding setup cost
+After Checkpoint 5 (partial hashing), you hash only the first 4 KB of most files — a function tuned for short inputs can outperform one tuned for large ones
+What you'd actually be building:
+
+Something like a streaming 64-bit hash with explicit SIMD — process 32 bytes per loop iteration using the same idea as xxHash but written by you, for this workload. You'd learn:
+
+How bit mixing works (why you XOR, rotate, and multiply specific constants)
+What SIMD intrinsics look like in C++ (__m256i, _mm256_xor_si256)
+Why the magic constants in xxHash are those specific numbers (they're chosen to maximize avalanche effect — a 1-bit input change flips ~50% of output bits)

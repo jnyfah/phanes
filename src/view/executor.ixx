@@ -129,6 +129,13 @@ export struct Executor
         return out.str();
     }
 
+
+    std::string operator()(DuplicateAction) const
+    {
+        // todo
+        return "";
+    }
+
     void run(const std::vector<Action>& actions) const
     {
         // compute shared data in parallel

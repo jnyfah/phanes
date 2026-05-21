@@ -50,6 +50,10 @@ export struct StatsAction
 {
 };
 
+export struct DuplicateAction
+{
+};
+
 export using Action = std::variant<SummaryAction,
                                    ExtensionsAction,
                                    EmptyDirsAction,
@@ -59,7 +63,8 @@ export using Action = std::variant<SummaryAction,
                                    LargestDirsAction,
                                    RecentAction,
                                    MetricsAction,
-                                   StatsAction>;
+                                   StatsAction,
+                                   DuplicateAction>;
 
 struct ParseResult
 {
@@ -88,8 +93,9 @@ export auto handle_symlinks(std::optional<std::string_view>) -> std::expected<Ac
 export auto handle_errors(std::optional<std::string_view>) -> std::expected<Action, std::string>;
 export auto handle_metrics(std::optional<std::string_view>) -> std::expected<Action, std::string>;
 export auto handle_stats(std::optional<std::string_view>) -> std::expected<Action, std::string>;
+export auto handle_duplicates(std::optional<std::string_view>) -> std::expected<Action, std::string>;
 
-constexpr size_t N = 10;
+constexpr size_t N = 11;
 constexpr std::array<FlagSpec, N> flag_table{
     FlagSpec{"--summary", false, handle_summary, "Show overall scan summary", ""},
     FlagSpec{"--largest-files", true, handle_largest_files, "List the N largest files", "<N>"},
@@ -101,6 +107,7 @@ constexpr std::array<FlagSpec, N> flag_table{
     FlagSpec{"--errors", false, handle_errors, "Show filesystem errors encountered", ""},
     FlagSpec{"--metrics", false, handle_metrics, "Show per-directory depth and size metrics", ""},
     FlagSpec{"--stats", false, handle_stats, "Show aggregate directory statistics", ""},
+    FlagSpec{"--duplicates", false, handle_duplicates, "Find duplicates", ""},
 };
 
 export auto parse_positive_size(std::string_view str, std::string_view flag_name) -> std::expected<size_t, std::string>;
