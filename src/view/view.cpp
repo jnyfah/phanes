@@ -331,3 +331,33 @@ void print_directory_metrics(std::ostream& os, const DirectoryMetrics& metrics, 
 
     std::println(os);
 }
+
+void print_duplicates(std::ostream& os, const std::vector<DuplicateGroup>& groups, const DirectoryTree& tree)
+{
+    if (groups.empty())
+    {
+        std::println(os, "No duplicate files found.");
+        return;
+    }
+
+    std::size_t total_files = 0;
+    std::uintmax_t wasted = 0;
+    for (const auto& g : groups)
+    {
+        total_files += g.files.size();
+        wasted += g.size * (g.files.size() - 1); // one copy is "original", rest is waste
+    }
+
+    std::println(os, "Duplicate Files ({} groups, {} files, {} wasted)",
+                 groups.size(), total_files, format_size(wasted));
+    std::println(os, "--------------------------------------------\n");
+
+    for (std::size_t i = 0; i < groups.size(); ++i)
+    {
+        const auto& group = groups[i];
+        std::println(os, "Group {} — {} copies — {} each", i + 1, group.files.size(), format_size(group.size));
+        for (FileId id : group.files)
+            std::println(os, "  {}", tree.files[id].path.string());
+        std::println(os);
+    }
+}

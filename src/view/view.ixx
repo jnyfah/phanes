@@ -28,3 +28,5 @@ export void print_errors(std::ostream& os, const std::deque<ErrorRecord>& errors
 
 export void print_directory_stats(std::ostream& os, const DirectoryStats& stats, const DirectoryTree& tree);
 export void print_directory_metrics(std::ostream& os, const DirectoryMetrics& metrics, const DirectoryTree& tree);
+
+export void print_duplicates(std::ostream& os, const std::vector<DuplicateGroup>& groups, const DirectoryTree& tree);
