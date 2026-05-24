@@ -38,7 +38,7 @@ auto partial_hash_file(const std::filesystem::path& path) -> std::expected<Hash,
     return XXH3_64bits(buf, static_cast<size_t>(file.gcount()));
 }
 
-auto hash_file(const std::filesystem::path& path) -> std::expected<Hash, HashError>
+auto hash_file(const std::filesystem::path& path, XXH3_state_t* state) -> std::expected<Hash, HashError>
 {
     std::ifstream file(path, std::ios::binary);
     if (!file)
@@ -46,8 +46,7 @@ auto hash_file(const std::filesystem::path& path) -> std::expected<Hash, HashErr
         return std::unexpected(HashError{"cannot open: " + path.string()});
     }
 
-    XXH3_state_t* state = XXH3_createState();
-    XXH3_64bits_reset(state);
+    XXH3_64bits_reset(state); // reset to fresh, no allocation
 
     char buf[65536];
     while (file.read(buf, sizeof(buf)) || file.gcount() > 0)
@@ -55,9 +54,7 @@ auto hash_file(const std::filesystem::path& path) -> std::expected<Hash, HashErr
         XXH3_64bits_update(state, buf, static_cast<size_t>(file.gcount()));
     }
 
-    Hash result = XXH3_64bits_digest(state);
-    XXH3_freeState(state);
-    return result;
+    return XXH3_64bits_digest(state);
 }
 
 std::vector<DuplicateGroup> group_files_by_size(const DirectoryTree& tree)
@@ -108,7 +105,7 @@ std::vector<DuplicateGroup> compute_duplicate_groups(const DirectoryTree& tree)
     LockFreeDeque<std::size_t> tasks;
     for (std::size_t i = 0; i < total; ++i)
     {
-        tasks.push_back(i);  // add tasks 
+        tasks.push_back(i); // add tasks
     }
 
     // one result slot per thread
@@ -116,7 +113,10 @@ std::vector<DuplicateGroup> compute_duplicate_groups(const DirectoryTree& tree)
 
     auto worker = [&](std::size_t thread_id)
     {
-        auto& local = per_thread[thread_id]; // this thread owns this slot exclusively
+        auto& local = per_thread[thread_id];
+
+        // one state allocation per thread — reused across every file this thread hashes
+        XXH3_state_t* state = XXH3_createState();
 
         while (!tasks.empty())
         {
@@ -129,33 +129,31 @@ std::vector<DuplicateGroup> compute_duplicate_groups(const DirectoryTree& tree)
             const auto& group = size_groups[*idx];
 
             // stage 1 — partial hash (first 4KB only)
-            // group files by their partial hash, discard any that are already unique
             std::unordered_map<Hash, std::vector<FileId>> by_partial;
             for (FileId id : group.files)
             {
                 auto hash = partial_hash_file(tree.files[id].path);
                 if (hash)
                 {
-                    by_partial[*h].push_back(id);
+                    by_partial[*hash].push_back(id);
                 }
             }
 
             // stage 2 — full hash only for files that survived stage 1
-            // if a partial-hash bucket has only 1 file, it can't be a duplicate — skip it
             std::unordered_map<Hash, std::vector<FileId>> by_full;
             for (auto& [partial, candidates] : by_partial)
             {
                 if (candidates.size() < 2)
                 {
-                    continue; // unique partial hash — no duplicate possible, skip full hash
+                    continue; // unique partial hash — can't be a duplicate, skip
                 }
 
                 for (FileId id : candidates)
                 {
-                    auto h = hash_file(tree.files[id].path);
-                    if (h)
+                    auto hash = hash_file(tree.files[id].path, state);
+                    if (hash)
                     {
-                        by_full[*h].push_back(id);
+                        by_full[*hash].push_back(id);
                     }
                 }
             }
@@ -168,6 +166,7 @@ std::vector<DuplicateGroup> compute_duplicate_groups(const DirectoryTree& tree)
                 }
             }
         }
+        XXH3_freeState(state);
     };
 
     {
