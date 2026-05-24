@@ -26,6 +26,8 @@ FetchContent_MakeAvailable(xxhash)
 enable_testing()
 
 add_subdirectory(src)
+
+# todo tests should be optional?
 add_subdirectory(tests)
 
 option(PHANES_BUILD_BENCHMARKS "Build Google Benchmark benchmarks" OFF)

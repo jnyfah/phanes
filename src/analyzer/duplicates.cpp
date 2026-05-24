@@ -195,7 +195,7 @@ std::vector<DuplicateGroup> group_files_by_size(const DirectoryTree& tree)
     return result;
 }
 
-std::vector<DuplicateGroup> compute_duplicate_groups(const DirectoryTree& tree)
+std::vector<DuplicateGroup> compute_duplicate_groups(const DirectoryTree& tree, std::size_t num_threads)
 {
     auto size_groups = group_files_by_size(tree);
     if (size_groups.empty())
@@ -212,7 +212,8 @@ std::vector<DuplicateGroup> compute_duplicate_groups(const DirectoryTree& tree)
                       });
 
     const std::size_t total = size_groups.size();
-    const std::size_t num_threads = std::max(1u, std::thread::hardware_concurrency());
+    const std::size_t hw = std::max(1u, std::thread::hardware_concurrency());
+    const std::size_t n_threads = (num_threads == 0) ? hw * 2 : std::max(std::size_t{1}, num_threads);
 
     LockFreeDeque<std::size_t> tasks;
     for (std::size_t i = 0; i < total; ++i)
@@ -221,7 +222,7 @@ std::vector<DuplicateGroup> compute_duplicate_groups(const DirectoryTree& tree)
     }
 
     // one result slot per thread
-    std::vector<std::vector<DuplicateGroup>> per_thread(num_threads);
+    std::vector<std::vector<DuplicateGroup>> per_thread(n_threads);
 
     auto worker = [&](std::size_t thread_id)
     {
@@ -306,8 +307,8 @@ std::vector<DuplicateGroup> compute_duplicate_groups(const DirectoryTree& tree)
 
     {
         std::vector<std::jthread> threads;
-        threads.reserve(num_threads);
-        for (std::size_t i = 0; i < num_threads; ++i)
+        threads.reserve(n_threads);
+        for (std::size_t i = 0; i < n_threads; ++i)
         {
             threads.emplace_back(worker, i); // pass thread index so it knows its slot
         }
