@@ -23,9 +23,11 @@ TODO
 2. Mmap?
 3. read chapter 9
 4. read chapter 12
-5. multi-sample hashing
-6. avoid reopening tiny files
+5. i may be over threading ? so bench mark 
 coroutines with iouring? but what of windows 
+
+
+
 
 
 
