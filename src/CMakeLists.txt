@@ -16,6 +16,7 @@ target_sources(phanes_core
   PRIVATE
       builder/builder.cpp
       analyzer/analyzer.cpp
+      analyzer/duplicates.cpp
       parser/parser.cpp
       view/view.cpp
 )
@@ -32,6 +33,10 @@ target_link_libraries(phanes
 target_compile_options(phanes PRIVATE
     $<$<CXX_COMPILER_ID:MSVC>:/wd4996>
     $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wno-deprecated-declarations>
+)
+
+target_link_libraries(phanes_core
+    PRIVATE xxhash
 )
 
 target_compile_options(phanes_core PRIVATE

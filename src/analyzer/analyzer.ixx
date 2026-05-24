@@ -65,6 +65,12 @@ export struct FileStats
     std::vector<FileId> symlink_ids;
 };
 
+export struct DuplicateGroup
+{
+    std::uintmax_t size;
+    std::vector<FileId> files;
+};
+
 export FileStats compute_file_stats(const DirectoryTree& tree);
 
 export SummaryReport
@@ -86,3 +92,7 @@ export DirectoryStats compute_directory_stats(const DirectoryTree& tree, const D
 export DirectoryMetrics compute_directory_metrics(const DirectoryTree& tree);
 
 export const std::deque<ErrorRecord>& get_errors(const DirectoryTree& tree);
+
+export std::vector<DuplicateGroup> group_files_by_size(const DirectoryTree& tree);
+
+export std::vector<DuplicateGroup> compute_duplicate_groups(const DirectoryTree& tree, std::size_t num_threads = 0);

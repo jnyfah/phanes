@@ -129,6 +129,26 @@ export struct Executor
         return out.str();
     }
 
+    std::string operator()(DuplicateAction) const
+    {
+        // TIMING START — remove when done profiling
+        auto t0 = std::chrono::steady_clock::now();
+
+        auto groups = compute_duplicate_groups(tree);
+
+        // TIMING END — remove when done profiling
+        auto t1 = std::chrono::steady_clock::now();
+        auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
+
+        std::ostringstream out;
+        print_duplicates(out, groups, tree);
+
+        // TIMING PRINT — remove when done profiling
+        std::println(out, "[timing] duplicate scan took {} ms", ms);
+
+        return out.str();
+    }
+
     void run(const std::vector<Action>& actions) const
     {
         // compute shared data in parallel
