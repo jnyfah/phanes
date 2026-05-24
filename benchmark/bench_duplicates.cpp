@@ -1,5 +1,4 @@
 #include <benchmark/benchmark.h>
-
 #include <chrono>
 #include <filesystem>
 #include <format>
@@ -24,7 +23,7 @@ fs::path make_bench_path(std::string_view stem)
 {
     const auto now = std::chrono::steady_clock::now().time_since_epoch().count();
     return fs::temp_directory_path() /
-           std::format("{}_{}_{}", stem, now, std::hash<std::thread::id>{}(std::this_thread::get_id()));
+        std::format("{}_{}_{}", stem, now, std::hash<std::thread::id>{}(std::this_thread::get_id()));
 }
 
 void create_fixture(const fs::path& root,
@@ -90,13 +89,7 @@ static void BM_Duplicates_ThreadScaling(benchmark::State& state)
 
     fs::remove_all(root);
 }
-BENCHMARK(BM_Duplicates_ThreadScaling)
-    ->Arg(1)
-    ->Arg(2)
-    ->Arg(4)
-    ->Arg(8)
-    ->Arg(16)
-    ->Unit(benchmark::kMillisecond);
+BENCHMARK(BM_Duplicates_ThreadScaling)->Arg(1)->Arg(2)->Arg(4)->Arg(8)->Arg(16)->Unit(benchmark::kMillisecond);
 
 // ============================================================================
 // File size scaling
@@ -124,13 +117,13 @@ static void BM_Duplicates_FileSizeScaling(benchmark::State& state)
     fs::remove_all(root);
 }
 BENCHMARK(BM_Duplicates_FileSizeScaling)
-    ->Arg(1 * 1024)          //   1KB — tiny fast path
-    ->Arg(4 * 1024)          //   4KB — boundary of tiny fast path
-    ->Arg(16 * 1024)         //  16KB — front+end samples, then full read
-    ->Arg(64 * 1024)         //  64KB — two-stage filter clearly engaged
-    ->Arg(256 * 1024)        // 256KB
-    ->Arg(1024 * 1024)       //   1MB — full hash dominates
-    ->Arg(4 * 1024 * 1024)   //   4MB
+    ->Arg(1 * 1024) //   1KB — tiny fast path
+    ->Arg(4 * 1024) //   4KB — boundary of tiny fast path
+    ->Arg(16 * 1024) //  16KB — front+end samples, then full read
+    ->Arg(64 * 1024) //  64KB — two-stage filter clearly engaged
+    ->Arg(256 * 1024) // 256KB
+    ->Arg(1024 * 1024) //   1MB — full hash dominates
+    ->Arg(4 * 1024 * 1024) //   4MB
     ->Unit(benchmark::kMillisecond);
 
 // ============================================================================
@@ -160,7 +153,7 @@ static void BM_Duplicates_FilterEffectiveness(benchmark::State& state)
     fs::remove_all(root);
 }
 BENCHMARK(BM_Duplicates_FilterEffectiveness)
-    ->Arg(0)   // baseline: all files are duplicates, nothing for filter to prune
+    ->Arg(0) // baseline: all files are duplicates, nothing for filter to prune
     ->Arg(10)
     ->Arg(50)
     ->Arg(100) // 100 unique files: filter should eliminate them cheaply at stage 1

@@ -19,11 +19,11 @@ Why the magic constants in xxHash are those specific numbers (they're chosen to 
 
 
 TODO
-1. generator instead of vector 
+1. generator instead of vector  - coroutines 
 2. Mmap?
 3. read chapter 9
 4. read chapter 12
-5. i may be over threading ? so bench mark 
+5. i may be over threading ? so bench mark - i added more threads but check windows 
 coroutines with iouring? but what of windows 
 
 

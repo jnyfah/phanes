@@ -95,5 +95,4 @@ export const std::deque<ErrorRecord>& get_errors(const DirectoryTree& tree);
 
 export std::vector<DuplicateGroup> group_files_by_size(const DirectoryTree& tree);
 
-export std::vector<DuplicateGroup> compute_duplicate_groups(const DirectoryTree& tree,
-                                                             std::size_t num_threads = 0);
+export std::vector<DuplicateGroup> compute_duplicate_groups(const DirectoryTree& tree, std::size_t num_threads = 0);
