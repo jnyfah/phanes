@@ -23,6 +23,21 @@ struct HashError
 };
 using Hash = std::uint64_t;
 
+// reads only the first 4KB
+auto partial_hash_file(const std::filesystem::path& path) -> std::expected<Hash, HashError>
+{
+    std::ifstream file(path, std::ios::binary);
+    if (!file)
+    {
+        return std::unexpected(HashError{"cannot open: " + path.string()});
+    }
+
+    char buf[4096];
+    file.read(buf, sizeof(buf));
+
+    return XXH3_64bits(buf, static_cast<size_t>(file.gcount()));
+}
+
 auto hash_file(const std::filesystem::path& path) -> std::expected<Hash, HashError>
 {
     std::ifstream file(path, std::ios::binary);
@@ -112,18 +127,40 @@ std::vector<DuplicateGroup> compute_duplicate_groups(const DirectoryTree& tree)
             }
 
             const auto& group = size_groups[*idx];
-            std::unordered_map<Hash, std::vector<FileId>> by_hash;
 
+            // stage 1 — partial hash (first 4KB only)
+            // group files by their partial hash, discard any that are already unique
+            std::unordered_map<Hash, std::vector<FileId>> by_partial;
             for (FileId id : group.files)
             {
-                auto hash = hash_file(tree.files[id].path);
+                auto hash = partial_hash_file(tree.files[id].path);
                 if (hash)
                 {
-                    by_hash[*hash].push_back(id);
+                    by_partial[*h].push_back(id);
                 }
             }
 
-            for (auto& [hash, files] : by_hash)
+            // stage 2 — full hash only for files that survived stage 1
+            // if a partial-hash bucket has only 1 file, it can't be a duplicate — skip it
+            std::unordered_map<Hash, std::vector<FileId>> by_full;
+            for (auto& [partial, candidates] : by_partial)
+            {
+                if (candidates.size() < 2)
+                {
+                    continue; // unique partial hash — no duplicate possible, skip full hash
+                }
+
+                for (FileId id : candidates)
+                {
+                    auto h = hash_file(tree.files[id].path);
+                    if (h)
+                    {
+                        by_full[*h].push_back(id);
+                    }
+                }
+            }
+
+            for (auto& [hash, files] : by_full)
             {
                 if (files.size() >= 2)
                 {
