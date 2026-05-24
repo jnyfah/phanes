@@ -7,8 +7,10 @@ module;
 #include <expected>
 #include <filesystem>
 #include <fstream>
+#include <future>
 #include <ranges>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 
@@ -76,30 +78,62 @@ std::vector<DuplicateGroup> group_files_by_size(const DirectoryTree& tree)
 std::vector<DuplicateGroup> compute_duplicate_groups(const DirectoryTree& tree)
 {
     auto size_groups = group_files_by_size(tree);
-
-    // hash each file, re-group by hash value
-    std::vector<DuplicateGroup> result;
-
-    for (auto& group : size_groups)
+    if (size_groups.empty())
     {
-        std::unordered_map<Hash, std::vector<FileId>> by_hash;
+        return {};
+    }
 
-        for (FileId id : group.files)
+    // split size_groups evenly across N threads — one async task per thread
+    const std::size_t num_threads = std::max(1u, std::thread::hardware_concurrency());
+    const std::size_t total       = size_groups.size();
+    const std::size_t chunk_size  = (total + num_threads - 1) / num_threads;
+
+    // each task processes its slice of size_groups independently — no shared state,
+    // no mutex needed, results are collected at the end
+    auto process_chunk = [&](std::size_t start, std::size_t end) -> std::vector<DuplicateGroup>
+    {
+        std::vector<DuplicateGroup> local;
+        for (std::size_t i = start; i < end; ++i)
         {
-            auto hash = hash_file(tree.files[id].path);
-            if (hash)
+            const auto& group = size_groups[i];
+            std::unordered_map<Hash, std::vector<FileId>> by_hash;
+
+            for (FileId id : group.files)
             {
-                by_hash[*hash].push_back(id);
+                auto hash = hash_file(tree.files[id].path);
+                if (hash)
+                {
+                    by_hash[*hash].push_back(id);
+                }
+                // file vanished or lost permission between scan and hash — skip silently
             }
-            // if hashing failed (permission lost, file removed) we skip silently ??
+
+            for (auto& [hash, files] : by_hash)
+                if (files.size() >= 2)
+                {
+                    local.push_back({group.size, std::move(files)});
+                }
         }
+        return local;
+    };
 
-        for (auto& [hash, files] : by_hash)
+    // launch one task per thread, each working on its own slice
+    std::vector<std::future<std::vector<DuplicateGroup>>> futures;
+    futures.reserve(num_threads);
+    for (std::size_t i = 0; i < num_threads; ++i)
+    {
+        std::size_t start = i * chunk_size;
+        std::size_t end   = std::min(start + chunk_size, total);
+        futures.push_back(std::async(std::launch::async, process_chunk, start, end));
+    }
+
+    // gather results from all threads
+    std::vector<DuplicateGroup> result;
+    for (auto& f : futures)
+    {
+        for (auto& g : f.get())
         {
-            if (files.size() >= 2)
-            {
-                result.push_back({group.size, std::move(files)});
-            }
+            result.push_back(std::move(g));
         }
     }
 

@@ -348,8 +348,11 @@ void print_duplicates(std::ostream& os, const std::vector<DuplicateGroup>& group
         wasted += g.size * (g.files.size() - 1); // one copy is "original", rest is waste
     }
 
-    std::println(os, "Duplicate Files ({} groups, {} files, {} wasted)",
-                 groups.size(), total_files, format_size(wasted));
+    std::println(os,
+                 "Duplicate Files ({} groups, {} files, {} wasted)",
+                 groups.size(),
+                 total_files,
+                 format_size(wasted));
     std::println(os, "--------------------------------------------\n");
 
     for (std::size_t i = 0; i < groups.size(); ++i)

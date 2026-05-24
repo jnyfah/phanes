@@ -368,3 +368,12 @@ Something like a streaming 64-bit hash with explicit SIMD — process 32 bytes p
 How bit mixing works (why you XOR, rotate, and multiply specific constants)
 What SIMD intrinsics look like in C++ (__m256i, _mm256_xor_si256)
 Why the magic constants in xxHash are those specific numbers (they're chosen to maximize avalanche effect — a 1-bit input change flips ~50% of output bits)
+
+
+
+
+to use 
+generator instead of vector 
+coroutines with iouring? but what of windows 
+
+
