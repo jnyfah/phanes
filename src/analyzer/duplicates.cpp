@@ -13,6 +13,7 @@ module;
 #include <unordered_map>
 #include <vector>
 
+
 module analyzer;
 
 import phanes_deque;
@@ -38,21 +39,19 @@ auto partial_hash_file(const std::filesystem::path& path) -> std::expected<Hash,
     return XXH3_64bits(buf, static_cast<size_t>(file.gcount()));
 }
 
+// ifstream with 64KB buffer — explicit bulk reads beat mmap for cold-cache sequential scans
+// mmap's lazy page-fault model loses when files are not in the page cache
 auto hash_file(const std::filesystem::path& path, XXH3_state_t* state) -> std::expected<Hash, HashError>
 {
     std::ifstream file(path, std::ios::binary);
     if (!file)
-    {
         return std::unexpected(HashError{"cannot open: " + path.string()});
-    }
 
-    XXH3_64bits_reset(state); // reset to fresh, no allocation
+    XXH3_64bits_reset(state);
 
     char buf[65536];
     while (file.read(buf, sizeof(buf)) || file.gcount() > 0)
-    {
         XXH3_64bits_update(state, buf, static_cast<size_t>(file.gcount()));
-    }
 
     return XXH3_64bits_digest(state);
 }
@@ -96,8 +95,16 @@ std::vector<DuplicateGroup> compute_duplicate_groups(const DirectoryTree& tree)
         return {};
     }
 
-    // largest groups first
-    std::ranges::sort(size_groups, std::ranges::greater{}, &DuplicateGroup::size);
+    // primary: largest first (load balance — big jobs distributed early)
+    // secondary: path of first file (I/O locality — groups in same directory end up adjacent
+    //            in the deque, so threads naturally read nearby files consecutively)
+    std::ranges::sort(size_groups,
+                      [&](const DuplicateGroup& a, const DuplicateGroup& b)
+                      {
+                          if (a.size != b.size)
+                              return a.size > b.size;
+                          return tree.files[a.files[0]].path < tree.files[b.files[0]].path;
+                      });
 
     const std::size_t total = size_groups.size();
     const std::size_t num_threads = std::max(1u, std::thread::hardware_concurrency());
