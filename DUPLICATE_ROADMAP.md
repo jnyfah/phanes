@@ -375,5 +375,7 @@ Why the magic constants in xxHash are those specific numbers (they're chosen to 
 to use 
 generator instead of vector 
 coroutines with iouring? but what of windows 
+mmap 
+
 
 

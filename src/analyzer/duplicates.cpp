@@ -7,7 +7,6 @@ module;
 #include <expected>
 #include <filesystem>
 #include <fstream>
-#include <future>
 #include <ranges>
 #include <string>
 #include <thread>
@@ -15,6 +14,8 @@ module;
 #include <vector>
 
 module analyzer;
+
+import phanes_deque;
 
 struct HashError
 {
@@ -83,19 +84,34 @@ std::vector<DuplicateGroup> compute_duplicate_groups(const DirectoryTree& tree)
         return {};
     }
 
-    // split size_groups evenly across N threads — one async task per thread
-    const std::size_t num_threads = std::max(1u, std::thread::hardware_concurrency());
-    const std::size_t total       = size_groups.size();
-    const std::size_t chunk_size  = (total + num_threads - 1) / num_threads;
+    // largest groups first
+    std::ranges::sort(size_groups, std::ranges::greater{}, &DuplicateGroup::size);
 
-    // each task processes its slice of size_groups independently — no shared state,
-    // no mutex needed, results are collected at the end
-    auto process_chunk = [&](std::size_t start, std::size_t end) -> std::vector<DuplicateGroup>
+    const std::size_t total = size_groups.size();
+    const std::size_t num_threads = std::max(1u, std::thread::hardware_concurrency());
+
+    LockFreeDeque<std::size_t> tasks;
+    for (std::size_t i = 0; i < total; ++i)
     {
-        std::vector<DuplicateGroup> local;
-        for (std::size_t i = start; i < end; ++i)
+        tasks.push_back(i);  // add tasks 
+    }
+
+    // one result slot per thread
+    std::vector<std::vector<DuplicateGroup>> per_thread(num_threads);
+
+    auto worker = [&](std::size_t thread_id)
+    {
+        auto& local = per_thread[thread_id]; // this thread owns this slot exclusively
+
+        while (!tasks.empty())
         {
-            const auto& group = size_groups[i];
+            auto idx = tasks.steal_front();
+            if (!idx)
+            {
+                continue; // CAS lost to another thread, retry
+            }
+
+            const auto& group = size_groups[*idx];
             std::unordered_map<Hash, std::vector<FileId>> by_hash;
 
             for (FileId id : group.files)
@@ -105,33 +121,32 @@ std::vector<DuplicateGroup> compute_duplicate_groups(const DirectoryTree& tree)
                 {
                     by_hash[*hash].push_back(id);
                 }
-                // file vanished or lost permission between scan and hash — skip silently
             }
 
             for (auto& [hash, files] : by_hash)
+            {
                 if (files.size() >= 2)
                 {
                     local.push_back({group.size, std::move(files)});
                 }
+            }
         }
-        return local;
     };
 
-    // launch one task per thread, each working on its own slice
-    std::vector<std::future<std::vector<DuplicateGroup>>> futures;
-    futures.reserve(num_threads);
-    for (std::size_t i = 0; i < num_threads; ++i)
     {
-        std::size_t start = i * chunk_size;
-        std::size_t end   = std::min(start + chunk_size, total);
-        futures.push_back(std::async(std::launch::async, process_chunk, start, end));
+        std::vector<std::jthread> threads;
+        threads.reserve(num_threads);
+        for (std::size_t i = 0; i < num_threads; ++i)
+        {
+            threads.emplace_back(worker, i); // pass thread index so it knows its slot
+        }
     }
 
-    // gather results from all threads
+    // merge all per-thread results — single thread, no contention
     std::vector<DuplicateGroup> result;
-    for (auto& f : futures)
+    for (auto& local : per_thread)
     {
-        for (auto& g : f.get())
+        for (auto& g : local)
         {
             result.push_back(std::move(g));
         }
