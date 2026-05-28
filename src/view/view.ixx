@@ -30,3 +30,8 @@ export void print_directory_stats(std::ostream& os, const DirectoryStats& stats,
 export void print_directory_metrics(std::ostream& os, const DirectoryMetrics& metrics, const DirectoryTree& tree);
 
 export void print_duplicates(std::ostream& os, const std::vector<DuplicateGroup>& groups, const DirectoryTree& tree);
+
+export void
+print_duplicate_group(std::ostream& os, const DuplicateGroup& group, const DirectoryTree& tree, std::size_t index);
+export void
+print_duplicate_footer(std::ostream& os, std::size_t group_count, std::size_t total_files, std::uintmax_t wasted);
