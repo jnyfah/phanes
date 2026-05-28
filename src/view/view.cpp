@@ -345,7 +345,7 @@ void print_duplicates(std::ostream& os, const std::vector<DuplicateGroup>& group
     for (const auto& g : groups)
     {
         total_files += g.files.size();
-        wasted += g.size * (g.files.size() - 1); // one copy is "original", rest is waste
+        wasted += g.size * (g.files.size() - 1);
     }
 
     std::println(os,
@@ -360,7 +360,25 @@ void print_duplicates(std::ostream& os, const std::vector<DuplicateGroup>& group
         const auto& group = groups[i];
         std::println(os, "Group {} — {} copies — {} each", i + 1, group.files.size(), format_size(group.size));
         for (FileId id : group.files)
+        {
             std::println(os, "  {}", tree.files[id].path.string());
+        }
         std::println(os);
     }
+}
+
+void print_duplicate_group(std::ostream& os, const DuplicateGroup& group, const DirectoryTree& tree, std::size_t index)
+{
+    std::println(os, "Group {} — {} copies — {} each", index, group.files.size(), format_size(group.size));
+    for (FileId id : group.files)
+    {
+        std::println(os, "  {}", tree.files[id].path.string());
+    }
+    std::println(os);
+}
+
+void print_duplicate_footer(std::ostream& os, std::size_t group_count, std::size_t total_files, std::uintmax_t wasted)
+{
+    std::println(os, "--------------------------------------------");
+    std::println(os, "Total: {} groups, {} files, {} wasted", group_count, total_files, format_size(wasted));
 }

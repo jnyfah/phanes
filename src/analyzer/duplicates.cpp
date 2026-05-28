@@ -3,9 +3,14 @@ module;
 #include "xxhash.h"
 
 #include <algorithm>
+#include <atomic>
+#include <condition_variable>
 #include <cstdint>
+#include <deque>
 #include <expected>
 #include <filesystem>
+#include <generator>
+#include <mutex>
 #include <ranges>
 #include <string>
 #include <thread>
@@ -164,7 +169,7 @@ auto hash_file(const std::filesystem::path& path, XXH3_state_t* state) -> std::e
 #endif
 }
 
-std::vector<DuplicateGroup> group_files_by_size(const DirectoryTree& tree)
+std::generator<DuplicateGroup> group_files_by_size(const DirectoryTree& tree)
 {
     // readable files
     std::vector<FileId> ids;
@@ -179,28 +184,23 @@ std::vector<DuplicateGroup> group_files_by_size(const DirectoryTree& tree)
     // sort
     std::ranges::sort(ids, {}, [&](FileId id) { return tree.files[id].size; });
 
-    // group
-    std::vector<DuplicateGroup> result;
-
     for (auto chunk :
          ids | std::views::chunk_by([&](FileId a, FileId b) { return tree.files[a].size == tree.files[b].size; }))
     {
         auto group = std::ranges::to<std::vector>(chunk);
         if (group.size() >= 2)
         {
-            result.push_back({tree.files[group[0]].size, std::move(group)});
+            co_yield DuplicateGroup{tree.files[group[0]].size, std::move(group)};
         }
     }
-
-    return result;
 }
 
-std::vector<DuplicateGroup> compute_duplicate_groups(const DirectoryTree& tree, std::size_t num_threads)
+std::generator<DuplicateGroup> compute_duplicate_groups(const DirectoryTree& tree, std::size_t num_threads)
 {
-    auto size_groups = group_files_by_size(tree);
+    auto size_groups = std::ranges::to<std::vector>(group_files_by_size(tree));
     if (size_groups.empty())
     {
-        return {};
+        co_return;
     }
 
     std::ranges::sort(size_groups,
@@ -221,14 +221,13 @@ std::vector<DuplicateGroup> compute_duplicate_groups(const DirectoryTree& tree, 
         tasks.push_back(i); // add tasks
     }
 
-    // one result slot per thread
-    std::vector<std::vector<DuplicateGroup>> per_thread(n_threads);
+    std::mutex mtx;
+    std::condition_variable cv;
+    std::deque<DuplicateGroup> ready;
+    std::atomic<std::size_t> finished{0};
 
-    auto worker = [&](std::size_t thread_id)
+    auto worker = [&]()
     {
-        auto& local = per_thread[thread_id];
-
-        // one state allocation per thread — reused across every hash call this thread makes
         XXH3_state_t* state = XXH3_createState();
 
         while (!tasks.empty())
@@ -258,15 +257,19 @@ std::vector<DuplicateGroup> compute_duplicate_groups(const DirectoryTree& tree, 
                 {
                     if (files.size() >= 2)
                     {
-                        local.push_back({group.size, std::move(files)});
+                        {
+                            std::lock_guard lock(mtx);
+                            ready.push_back({group.size, std::move(files)});
+                        }
+                        cv.notify_one();
                     }
                 }
                 continue;
             }
 
-            // stage 1 -- simple hash
+            // stage 1 — sample hash
             std::unordered_map<Hash, std::vector<FileId>> by_sample;
-            for (const auto id : group.files)
+            for (FileId id : group.files)
             {
                 auto hash = sample_hash_file(tree.files[id].path, tree.files[id].size, state);
                 if (hash)
@@ -275,13 +278,13 @@ std::vector<DuplicateGroup> compute_duplicate_groups(const DirectoryTree& tree, 
                 }
             }
 
-            // groups that survived simple hash -- run full hash
+            // stage 2 — full hash only for survivors
             std::unordered_map<Hash, std::vector<FileId>> by_full;
             for (auto& [sample, candidates] : by_sample)
             {
                 if (candidates.size() < 2)
                 {
-                    continue; // unique sample hash — can't be a duplicate
+                    continue; //  can't be a duplicate
                 }
 
                 for (FileId id : candidates)
@@ -298,11 +301,21 @@ std::vector<DuplicateGroup> compute_duplicate_groups(const DirectoryTree& tree, 
             {
                 if (files.size() >= 2)
                 {
-                    local.push_back({group.size, std::move(files)});
+                    {
+                        std::lock_guard lock(mtx);
+                        ready.push_back({group.size, std::move(files)});
+                    }
+                    cv.notify_one();
                 }
             }
         }
+
         XXH3_freeState(state);
+        // last thread out signals the generator body to stop waiting
+        if (++finished == n_threads)
+        {
+            cv.notify_all();
+        }
     };
 
     {
@@ -310,19 +323,28 @@ std::vector<DuplicateGroup> compute_duplicate_groups(const DirectoryTree& tree, 
         threads.reserve(n_threads);
         for (std::size_t i = 0; i < n_threads; ++i)
         {
-            threads.emplace_back(worker, i); // pass thread index so it knows its slot
+            threads.emplace_back(worker);
         }
-    }
 
-    // merge all per-thread results
-    std::vector<DuplicateGroup> result;
-    for (auto& local : per_thread)
-    {
-        for (auto& g : local)
+        // drain shared queue while workers run by yielding each confirmed group to the caller
+        while (true)
         {
-            result.push_back(std::move(g));
+            std::unique_lock lock(mtx);
+            cv.wait(lock, [&] { return !ready.empty() || finished == n_threads; });
+
+            while (!ready.empty())
+            {
+                auto group = std::move(ready.front());
+                ready.pop_front();
+                lock.unlock();
+                co_yield std::move(group); // caller prints this, workers keep running
+                lock.lock();
+            }
+
+            if (finished == n_threads)
+            {
+                break;
+            }
         }
     }
-
-    return result;
 }

@@ -81,7 +81,8 @@ static void BM_Duplicates_ThreadScaling(benchmark::State& state)
     const int64_t total_bytes = total_files * static_cast<int64_t>(file_size);
 
     for (auto _ : state)
-        benchmark::DoNotOptimize(compute_duplicate_groups(tree, num_threads));
+        for (auto&& g : compute_duplicate_groups(tree, num_threads))
+            benchmark::DoNotOptimize(g);
 
     state.SetItemsProcessed(state.iterations() * total_files);
     state.SetBytesProcessed(state.iterations() * total_bytes);

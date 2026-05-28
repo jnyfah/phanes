@@ -3,6 +3,7 @@ module;
 #include <chrono>
 #include <cstdint>
 #include <deque>
+#include <generator>
 #include <optional>
 #include <string>
 #include <vector>
@@ -93,6 +94,6 @@ export DirectoryMetrics compute_directory_metrics(const DirectoryTree& tree);
 
 export const std::deque<ErrorRecord>& get_errors(const DirectoryTree& tree);
 
-export std::vector<DuplicateGroup> group_files_by_size(const DirectoryTree& tree);
+export std::generator<DuplicateGroup> group_files_by_size(const DirectoryTree& tree);
 
-export std::vector<DuplicateGroup> compute_duplicate_groups(const DirectoryTree& tree, std::size_t num_threads = 0);
+export std::generator<DuplicateGroup> compute_duplicate_groups(const DirectoryTree& tree, std::size_t num_threads = 0);
