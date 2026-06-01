@@ -85,23 +85,33 @@ export void phanes_hash_update(PhanesHashState& state, const uint8_t* data, size
         len -= remaining;
     }
 
+    uint64_t v0 = state.acc[0]; // load once
+    uint64_t v1 = state.acc[1];
+    uint64_t v2 = state.acc[2];
+    uint64_t v3 = state.acc[3];
+
     for (size_t i = 0; i + 32 <= len; i += 32)
     {
 
         uint64_t word;
 
         std::memcpy(&word, data + i + 0, 8);
-        state.acc[0] = mix(state.acc[0], word);
+        v0 = mix(v0, word);
 
         std::memcpy(&word, data + i + 8, 8);
-        state.acc[1] = mix(state.acc[1], word);
+        v1 = mix(v1, word);
 
         std::memcpy(&word, data + i + 16, 8);
-        state.acc[2] = mix(state.acc[2], word);
+        v2 = mix(v2, word);
 
         std::memcpy(&word, data + i + 24, 8);
-        state.acc[3] = mix(state.acc[3], word);
+        v3 = mix(v3, word);
     }
+
+    state.acc[0] = v0; // store once
+    state.acc[1] = v1;
+    state.acc[2] = v2;
+    state.acc[3] = v3;
 
     size_t remaining = len % 32;
     std::memcpy(state.buffer, data + (len - remaining), remaining);
