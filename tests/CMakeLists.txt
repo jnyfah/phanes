@@ -22,8 +22,15 @@ target_link_libraries(builder_test PRIVATE phanes_core GTest::gtest_main)
 add_executable(view_test view_test.cpp)
 target_link_libraries(view_test PRIVATE phanes_core GTest::gtest_main)
 
+add_executable(hasher_test hasher_test.cpp)
+target_link_libraries(hasher_test PRIVATE phanes_core GTest::gtest_main)
+
 include(GoogleTest)
 gtest_discover_tests(parser_test)
 gtest_discover_tests(analyzer_test)
 gtest_discover_tests(builder_test)
 gtest_discover_tests(view_test)
+gtest_discover_tests(hasher_test)
+
+
+# fix test to have just one executable and add tests to pipeline aslo make tests optional to build

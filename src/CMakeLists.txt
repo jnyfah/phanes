@@ -10,6 +10,7 @@ target_sources(phanes_core
       builder/scheduler.cpp 
       builder/deque.cpp 
       analyzer/analyzer.ixx
+      analyzer/hasher.cpp
       parser/parser.ixx
       view/view.ixx
       view/executor.ixx

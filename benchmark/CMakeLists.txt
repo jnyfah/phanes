@@ -17,11 +17,13 @@ add_executable(phanes_bench
     bench_deque.cpp
     bench_tree.cpp
     bench_duplicates.cpp
+    bench_hasher.cpp
 )
 
 target_link_libraries(phanes_bench
     PRIVATE
         phanes_core
+        xxhash
         benchmark::benchmark
 )
 
