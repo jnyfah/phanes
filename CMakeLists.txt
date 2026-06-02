@@ -25,6 +25,12 @@ FetchContent_MakeAvailable(xxhash)
 
 enable_testing()
 
+# AVX2 is required by the SIMD hash in analyzer/hasher.cpp. Because C++ modules
+# bake target features into the compiled .pcm, every target that imports a phanes
+# module must be built with the same features — so this is set project-wide, not
+# per-target. (Applied after FetchContent so third-party deps are unaffected.)
+add_compile_options($<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-mavx2>)
+
 add_subdirectory(src)
 
 # todo tests should be optional?
