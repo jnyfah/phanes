@@ -24,6 +24,12 @@ module;
 #include <fstream>
 #endif
 
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+#endif
+
 module analyzer;
 
 import phanes_deque;
@@ -33,6 +39,25 @@ struct HashError
     std::string reason;
 };
 using Hash = std::uint64_t;
+
+// On Windows, OneDrive "Files On-Demand" files are placeholders: opening their
+// content triggers a download (hydration). We must NOT hash those — reading them
+// would pull the entire cloud folder to disk. GetFileAttributesW only reads the
+// attribute flags, which is safe (no hydration). Returns false everywhere else.
+static bool is_cloud_placeholder(const std::filesystem::path& path)
+{
+#ifdef _WIN32
+    const DWORD attrs = GetFileAttributesW(path.c_str());
+    if (attrs == INVALID_FILE_ATTRIBUTES)
+        return false;
+    // offline, or hydrate-on-open, or hydrate-on-read — all mean "not local yet"
+    return (attrs & (FILE_ATTRIBUTE_OFFLINE | FILE_ATTRIBUTE_RECALL_ON_OPEN |
+                     FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS)) != 0;
+#else
+    (void)path;
+    return false;
+#endif
+}
 
 // Fast hash, samples only 12kb
 auto sample_hash_file(const std::filesystem::path& path,
@@ -175,7 +200,7 @@ std::generator<DuplicateGroup> group_files_by_size(const DirectoryTree& tree)
     std::vector<FileId> ids;
     for (const auto file : tree.files)
     {
-        if (file.readable && !file.is_symlink && file.size > 0)
+        if (file.readable && !file.is_symlink && file.size > 0 && !is_cloud_placeholder(file.path))
         {
             ids.push_back(file.id);
         }
