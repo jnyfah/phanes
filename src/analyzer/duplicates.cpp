@@ -8,6 +8,7 @@ module;
 #include <expected>
 #include <filesystem>
 #include <generator>
+#include <memory>
 #include <mutex>
 #include <ranges>
 #include <string>
@@ -238,7 +239,8 @@ std::generator<DuplicateGroup> compute_duplicate_groups(const DirectoryTree& tre
     const std::size_t hw = std::max(1u, std::thread::hardware_concurrency());
     const std::size_t n_threads = (num_threads == 0) ? hw * 2 : std::max(std::size_t{1}, num_threads);
 
-    LockFreeDeque<std::size_t> tasks;
+    auto tasks_owner = std::make_unique<LockFreeDeque<std::size_t>>();
+    auto& tasks = *tasks_owner;
     for (std::size_t i = 0; i < total; ++i)
     {
         tasks.push_back(i); // add tasks
