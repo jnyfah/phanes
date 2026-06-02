@@ -14,11 +14,16 @@ static constexpr uint64_t seed = 0;
 
 export struct PhanesHashState
 {
-    uint64_t acc[4];
+    __m256i acc;
     uint8_t buffer[32];
     size_t buf_used;
     size_t total_len;
 };
+
+static inline auto rotate_left(__m256i acc, int n) -> __m256i
+{
+    return _mm256_or_si256(_mm256_slli_epi64(acc, n), _mm256_srli_epi64(acc, 64 - n));
+}
 
 static inline auto rotate_left(uint64_t x, int n) -> uint64_t
 {
@@ -31,29 +36,50 @@ static inline auto rotate_left(uint64_t x, int n) -> uint64_t
 
 export void phanes_hash_reset(PhanesHashState& state)
 {
-    state.acc[0] = seed + PRIME_1 + PRIME_2;
-    state.acc[1] = seed + PRIME_2;
-    state.acc[2] = seed;
-    state.acc[3] = seed - PRIME_1;
+    state.acc = _mm256_set_epi64x(seed - PRIME_1, // lane 3 (acc[3])
+                                  seed, // lane 2 (acc[2])
+                                  seed + PRIME_2, // lane 1 (acc[1])
+                                  seed + PRIME_1 + PRIME_2 // lane 0 (acc[0])
+    );
 
     state.buf_used = 0;
     state.total_len = 0;
     std::memset(state.buffer, 0, sizeof(state.buffer));
 }
 
-static inline uint64_t mix(uint64_t acc, uint64_t word)
+static inline __m256i mul64(__m256i v, uint64_t c)
 {
-    acc ^= word * PRIME_1;
-    acc = rotate_left(acc, 31);
-    acc *= PRIME_2;
+    __m256i mask32 = _mm256_set1_epi64x(0xFFFFFFFF);
 
+    __m256i v_lo = _mm256_and_si256(v, mask32);
+    __m256i v_hi = _mm256_srli_epi64(v, 32);
+
+    __m256i c_lo = _mm256_set1_epi64x((int64_t)(uint32_t)c);
+    __m256i c_hi = _mm256_set1_epi64x((int64_t)(c >> 32));
+
+    __m256i ll = _mm256_mul_epu32(v_lo, c_lo);
+    __m256i hl = _mm256_mul_epu32(v_hi, c_lo);
+    __m256i lh = _mm256_mul_epu32(v_lo, c_hi);
+
+    __m256i cross = _mm256_slli_epi64(_mm256_add_epi64(hl, lh), 32);
+
+    return _mm256_add_epi64(ll, cross);
+}
+
+static inline __m256i mix(__m256i acc, __m256i word)
+{
+    // acc ^= word * PRIME_1;
+    acc = _mm256_xor_si256(acc, mul64(word, PRIME_1));
+    acc = rotate_left(acc, 31);
+
+    // acc *= PRIME_2;
+    acc = mul64(acc, PRIME_2);
     return acc;
 }
 
 export void phanes_hash_update(PhanesHashState& state, const uint8_t* data, size_t len)
 {
-    // If there are leftover bytes from a previous update call sitting in state.buffer,
-    // you need to fill that buffer first before processing new data
+    // If there are leftover bytes from a previous update call sitting in state.buffer
 
     state.total_len += len; // track total bytes seen across all update calls
 
@@ -70,48 +96,25 @@ export void phanes_hash_update(PhanesHashState& state, const uint8_t* data, size
         }
         std::memcpy(state.buffer + state.buf_used, data, remaining);
 
-        uint64_t word;
-        std::memcpy(&word, state.buffer + 0, 8);
-        state.acc[0] = mix(state.acc[0], word);
-        std::memcpy(&word, state.buffer + 8, 8);
-        state.acc[1] = mix(state.acc[1], word);
-        std::memcpy(&word, state.buffer + 16, 8);
-        state.acc[2] = mix(state.acc[2], word);
-        std::memcpy(&word, state.buffer + 24, 8);
-        state.acc[3] = mix(state.acc[3], word);
+        __m256i word = _mm256_loadu_si256((const __m256i*)state.buffer);
+
+        state.acc = mix(state.acc, word);
 
         state.buf_used = 0; // buffer is consumed
         data += remaining; // advance past the bytes you already used
         len -= remaining;
     }
 
-    uint64_t v0 = state.acc[0]; // load once
-    uint64_t v1 = state.acc[1];
-    uint64_t v2 = state.acc[2];
-    uint64_t v3 = state.acc[3];
+    __m256i vacc = state.acc;
 
     for (size_t i = 0; i + 32 <= len; i += 32)
     {
 
-        uint64_t word;
-
-        std::memcpy(&word, data + i + 0, 8);
-        v0 = mix(v0, word);
-
-        std::memcpy(&word, data + i + 8, 8);
-        v1 = mix(v1, word);
-
-        std::memcpy(&word, data + i + 16, 8);
-        v2 = mix(v2, word);
-
-        std::memcpy(&word, data + i + 24, 8);
-        v3 = mix(v3, word);
+        __m256i word = _mm256_loadu_si256((const __m256i*)(data + i));
+        vacc = mix(vacc, word);
     }
 
-    state.acc[0] = v0; // store once
-    state.acc[1] = v1;
-    state.acc[2] = v2;
-    state.acc[3] = v3;
+    state.acc = vacc; // store once
 
     size_t remaining = len % 32;
     std::memcpy(state.buffer, data + (len - remaining), remaining);
@@ -120,14 +123,26 @@ export void phanes_hash_update(PhanesHashState& state, const uint8_t* data, size
 
 export auto phanes_hash_digest(PhanesHashState& state) -> uint64_t
 {
-    uint64_t h64 = rotate_left(state.acc[0], 1) + rotate_left(state.acc[1], 7) + rotate_left(state.acc[2], 12) +
-        rotate_left(state.acc[3], 18);
+    alignas(32) uint64_t lanes[4];
+    _mm256_store_si256((__m256i*)lanes, state.acc);
+
+    uint64_t h64 =
+        rotate_left(lanes[0], 1) + rotate_left(lanes[1], 7) + rotate_left(lanes[2], 12) + rotate_left(lanes[3], 18);
 
     h64 += state.total_len;
 
-    for (size_t i = 0; i < state.buf_used; i++)
+    if (state.buf_used > 0)
     {
-        h64 ^= (uint64_t)state.buffer[i] << ((i % 8) * 8);
+        alignas(32) uint8_t tmp[32] = {};
+        std::memcpy(tmp, state.buffer, state.buf_used);
+        __m256i tail = _mm256_load_si256((const __m256i*)tmp);
+        // extract and fold each lane individually
+        alignas(32) uint64_t words[4];
+        _mm256_store_si256((__m256i*)words, tail);
+        for (unsigned long word : words)
+        {
+            h64 ^= rotate_left(word, 11) * PRIME_3;
+        }
     }
 
     h64 ^= h64 >> 33;
