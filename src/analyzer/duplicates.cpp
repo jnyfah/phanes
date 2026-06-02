@@ -40,7 +40,7 @@ struct HashError
 using Hash = std::uint64_t;
 
 // On Windows, OneDrive "Files On-Demand" files are placeholders: opening their
-// content triggers a download (hydration). We do NOT hash those 
+// content triggers a download (hydration). We do NOT hash those
 static auto is_cloud_placeholder(const std::filesystem::path& path) -> bool
 {
 #ifdef _WIN32

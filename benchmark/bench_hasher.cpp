@@ -62,4 +62,3 @@ static void BM_PhanesHash_12KB(benchmark::State& bstate)
     bstate.SetBytesProcessed(bstate.iterations() * static_cast<int64_t>(DATA_12KB.size()));
 }
 BENCHMARK(BM_PhanesHash_12KB)->Unit(benchmark::kMicrosecond);
-
