@@ -10,6 +10,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_CXX_SCAN_FOR_MODULES ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 
 include(FetchContent)
@@ -25,11 +26,11 @@ FetchContent_MakeAvailable(xxhash)
 
 enable_testing()
 
-# AVX2 is required by the SIMD hash in analyzer/hasher.cpp. Because C++ modules
-# bake target features into the compiled .pcm, every target that imports a phanes
-# module must be built with the same features — so this is set project-wide, not
-# per-target. (Applied after FetchContent so third-party deps are unaffected.)
-add_compile_options($<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-mavx2>)
+# AVX2 is required by the SIMD hash in analyzer/hasher.cpp
+add_compile_options(
+    $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-mavx2>
+    $<$<CXX_COMPILER_ID:MSVC>:/arch:AVX2>
+)
 
 add_subdirectory(src)
 
