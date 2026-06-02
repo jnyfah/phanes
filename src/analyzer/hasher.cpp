@@ -12,6 +12,13 @@ static constexpr uint64_t PRIME_2 = 0xC2B2AE3D27D4EB4FULL;
 static constexpr uint64_t PRIME_3 = 0x165667B19E3779F9ULL;
 static constexpr uint64_t seed = 0;
 
+
+#if defined(_MSC_VER)
+#define FORCE_INLINE __forceinline
+#else
+#define FORCE_INLINE inline __attribute__((always_inline))
+#endif
+
 export struct PhanesHashState
 {
     __m256i acc[4];
@@ -22,13 +29,13 @@ export struct PhanesHashState
 };
 
 // SIMD
-static inline auto rotate_left(__m256i acc, int n) -> __m256i
+static FORCE_INLINE auto rotate_left(__m256i acc, int n) -> __m256i
 {
     return _mm256_or_si256(_mm256_slli_epi64(acc, n), _mm256_srli_epi64(acc, 64 - n));
 }
 
 // Scalar
-static inline auto rotate_left(uint64_t x, int n) -> uint64_t
+static FORCE_INLINE auto rotate_left(uint64_t x, int n) -> uint64_t
 {
     return (x << n) | (x >> (64 - n));
 }
@@ -49,7 +56,7 @@ export void phanes_hash_reset(PhanesHashState& state)
     std::memset(state.buffer, 0, sizeof(state.buffer));
 }
 
-static inline auto mul64(__m256i acc, __m256i c_lo, __m256i c_hi) -> __m256i
+static FORCE_INLINE auto mul64(__m256i acc, __m256i c_lo, __m256i c_hi) -> __m256i
 {
     // mask to split 64 bits into 2
     const __m256i mask32 = _mm256_set1_epi64x(0xFFFFFFFF);
@@ -69,7 +76,7 @@ static inline auto mul64(__m256i acc, __m256i c_lo, __m256i c_hi) -> __m256i
     return _mm256_add_epi64(ll, cross);
 }
 
-static inline auto mix(__m256i acc, __m256i word, __m256i p1_lo, __m256i p1_hi, __m256i p2_lo, __m256i p2_hi) -> __m256i
+static FORCE_INLINE auto mix(__m256i acc, __m256i word, __m256i p1_lo, __m256i p1_hi, __m256i p2_lo, __m256i p2_hi) -> __m256i
 {
     // acc ^= word * prime_1
     acc = _mm256_xor_si256(acc, mul64(word, p1_lo, p1_hi));
