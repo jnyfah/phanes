@@ -33,7 +33,7 @@ static inline auto rotate_left(uint64_t x, int n) -> uint64_t
     return (x << n) | (x >> (64 - n));
 }
 
-// reset to default values 
+// reset to default values
 export void phanes_hash_reset(PhanesHashState& state)
 {
 
@@ -69,7 +69,7 @@ static inline auto mul64(__m256i acc, __m256i c_lo, __m256i c_hi) -> __m256i
     return _mm256_add_epi64(ll, cross);
 }
 
-static inline auto mix(__m256i acc, __m256i word, __m256i p1_lo, __m256i p1_hi, __m256i p2_lo, __m256i p2_hi)-> __m256i
+static inline auto mix(__m256i acc, __m256i word, __m256i p1_lo, __m256i p1_hi, __m256i p2_lo, __m256i p2_hi) -> __m256i
 {
     // acc ^= word * prime_1
     acc = _mm256_xor_si256(acc, mul64(word, p1_lo, p1_hi));
@@ -90,7 +90,7 @@ export void phanes_hash_update(PhanesHashState& state, const uint8_t* data, size
     const __m256i p2_lo = _mm256_set1_epi64x((int64_t)(uint32_t)PRIME_2);
     const __m256i p2_hi = _mm256_set1_epi64x((int64_t)(PRIME_2 >> 32));
 
-    // load 
+    // load
     __m256i v0 = state.acc[0];
     __m256i v1 = state.acc[1];
     __m256i v2 = state.acc[2];
@@ -140,8 +140,8 @@ export void phanes_hash_update(PhanesHashState& state, const uint8_t* data, size
         len -= remaining;
     }
     size_t i = 0;
-    // realign so the 4x loop starts on a block index that's a multiple of 4
 
+    // realign so the 4x loop starts on a block index that's a multiple of 4
     while ((blocks & 3) != 0 && i + 32 <= len)
     {
         fold(blocks, _mm256_loadu_si256((const __m256i*)(data + i)));
@@ -201,8 +201,6 @@ export auto phanes_hash_digest(PhanesHashState& state) -> uint64_t
     _mm256_store_si256((__m256i*)(lanes + 8), state.acc[2]);
 
     _mm256_store_si256((__m256i*)(lanes + 12), state.acc[3]);
-
-    // fold all 16 lanes — rotate each by a different amount so they don't cancel
 
     static constexpr int rots[16] = {1, 7, 12, 18, 23, 27, 31, 36, 41, 45, 50, 54, 2, 9, 15, 20};
 

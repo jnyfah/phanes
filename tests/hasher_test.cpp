@@ -128,7 +128,7 @@ TEST(PhanesHash, StreamingMatchesSingleCall)
 
     PhanesHashState state;
     phanes_hash_reset(state);
-    phanes_hash_update(state, data,      25);
+    phanes_hash_update(state, data, 25);
     phanes_hash_update(state, data + 25, 25);
     phanes_hash_update(state, data + 50, 25);
     phanes_hash_update(state, data + 75, 25);
@@ -149,10 +149,27 @@ TEST(PhanesHash, StreamingArbitraryChunks)
     // chunk sizes that cross 32-byte block boundaries
     PhanesHashState state;
     phanes_hash_reset(state);
-    phanes_hash_update(state, data,      7);
-    phanes_hash_update(state, data + 7,  33);
+    phanes_hash_update(state, data, 7);
+    phanes_hash_update(state, data + 7, 33);
     phanes_hash_update(state, data + 40, 56);
     uint64_t streamed = phanes_hash_digest(state);
 
     EXPECT_EQ(single, streamed);
+}
+
+TEST(PhanesHash, StreamingUnalignedThenLargeChunk)
+{
+    uint8_t data[288];
+    for (int i = 0; i < 288; i++)
+        data[i] = static_cast<uint8_t>(i * 7 + 1);
+
+    uint64_t single = hash_once(data, 288);
+
+    PhanesHashState state;
+    phanes_hash_reset(state);
+    phanes_hash_update(state, data, 32); // 1 block → blocks=1 (unaligned)
+    phanes_hash_update(state, data + 32, 256); // large chunk → triggers 4x loop
+    uint64_t streamed = phanes_hash_digest(state);
+
+    EXPECT_EQ(single, streamed); // fails if you delete the realignment loop
 }
