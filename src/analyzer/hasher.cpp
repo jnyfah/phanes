@@ -21,7 +21,8 @@ static constexpr uint64_t seed = 0;
 
 export struct PhanesHashState
 {
-    __m256i acc[4];
+    __m256i acc[2]; // two independent SIMD accumulators — fewer live registers than
+                    // four, which matters on compilers whose allocator spills (MSVC)
     uint8_t buffer[32];
     size_t buf_used;
     size_t total_len;
@@ -46,8 +47,6 @@ export void phanes_hash_reset(PhanesHashState& state)
 
     state.acc[0] = _mm256_set_epi64x(seed - PRIME_1, seed, seed + PRIME_2, seed + PRIME_1 + PRIME_2);
     state.acc[1] = _mm256_set_epi64x(seed + PRIME_3, seed - PRIME_2, seed + PRIME_1, seed + PRIME_3 + PRIME_1);
-    state.acc[2] = _mm256_set_epi64x(seed + PRIME_1, seed + PRIME_3, seed - PRIME_2, seed + PRIME_2 + PRIME_3);
-    state.acc[3] = _mm256_set_epi64x(seed - PRIME_3, seed + PRIME_1 + PRIME_3, seed + PRIME_2, seed - PRIME_2);
     state.buf_used = 0;
     state.total_len = 0;
 
@@ -100,28 +99,15 @@ export void phanes_hash_update(PhanesHashState& state, const uint8_t* data, size
     // load
     __m256i v0 = state.acc[0];
     __m256i v1 = state.acc[1];
-    __m256i v2 = state.acc[2];
-    __m256i v3 = state.acc[3];
 
     size_t blocks = state.blocks;
 
     auto fold = [&](size_t idx, __m256i w)
     {
-        switch (idx & 3)
-        {
-        case 0:
-            v0 = mix(v0, w, p1_lo, p1_hi, p2_lo, p2_hi);
-            break;
-        case 1:
+        if (idx & 1)
             v1 = mix(v1, w, p1_lo, p1_hi, p2_lo, p2_hi);
-            break;
-        case 2:
-            v2 = mix(v2, w, p1_lo, p1_hi, p2_lo, p2_hi);
-            break;
-        case 3:
-            v3 = mix(v3, w, p1_lo, p1_hi, p2_lo, p2_hi);
-            break;
-        }
+        else
+            v0 = mix(v0, w, p1_lo, p1_hi, p2_lo, p2_hi);
     };
 
     // flush any pending buffered block first
@@ -148,34 +134,22 @@ export void phanes_hash_update(PhanesHashState& state, const uint8_t* data, size
     }
     size_t i = 0;
 
-    // realign so the 4x loop starts on a block index that's a multiple of 4
-    while ((blocks & 3) != 0 && i + 32 <= len)
+    // realign so the 2x loop starts on an even block index (→ w0→v0, w1→v1)
+    if ((blocks & 1) && i + 32 <= len)
     {
         fold(blocks, _mm256_loadu_si256((const __m256i*)(data + i)));
-
         ++blocks;
-
         i += 32;
     }
 
-    for (; i + 128 <= len; i += 128)
+    for (; i + 64 <= len; i += 64)
     {
         __m256i w0 = _mm256_loadu_si256((const __m256i*)(data + i));
-
         __m256i w1 = _mm256_loadu_si256((const __m256i*)(data + i + 32));
 
-        __m256i w2 = _mm256_loadu_si256((const __m256i*)(data + i + 64));
-
-        __m256i w3 = _mm256_loadu_si256((const __m256i*)(data + i + 96));
-
         v0 = mix(v0, w0, p1_lo, p1_hi, p2_lo, p2_hi);
-
         v1 = mix(v1, w1, p1_lo, p1_hi, p2_lo, p2_hi);
-
-        v2 = mix(v2, w2, p1_lo, p1_hi, p2_lo, p2_hi);
-
-        v3 = mix(v3, w3, p1_lo, p1_hi, p2_lo, p2_hi);
-        blocks += 4;
+        blocks += 2;
     }
 
     while (i + 32 <= len)
@@ -188,8 +162,6 @@ export void phanes_hash_update(PhanesHashState& state, const uint8_t* data, size
     // store
     state.acc[0] = v0;
     state.acc[1] = v1;
-    state.acc[2] = v2;
-    state.acc[3] = v3;
     state.blocks = blocks;
 
     // copy the overflow into buffer
@@ -200,20 +172,15 @@ export void phanes_hash_update(PhanesHashState& state, const uint8_t* data, size
 
 export auto phanes_hash_digest(PhanesHashState& state) -> uint64_t
 {
-    alignas(32) uint64_t lanes[16];
+    alignas(32) uint64_t lanes[8];
     _mm256_store_si256((__m256i*)(lanes + 0), state.acc[0]);
-
     _mm256_store_si256((__m256i*)(lanes + 4), state.acc[1]);
 
-    _mm256_store_si256((__m256i*)(lanes + 8), state.acc[2]);
-
-    _mm256_store_si256((__m256i*)(lanes + 12), state.acc[3]);
-
-    static constexpr int rots[16] = {1, 7, 12, 18, 23, 27, 31, 36, 41, 45, 50, 54, 2, 9, 15, 20};
+    static constexpr int rots[8] = {1, 7, 12, 18, 23, 27, 31, 36};
 
     uint64_t h64 = 0;
 
-    for (int j = 0; j < 16; ++j)
+    for (int j = 0; j < 8; ++j)
     {
         h64 += rotate_left(lanes[j], rots[j]);
     }
