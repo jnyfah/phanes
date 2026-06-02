@@ -23,7 +23,6 @@ add_executable(phanes_bench
 target_link_libraries(phanes_bench
     PRIVATE
         phanes_core
-        xxhash
         benchmark::benchmark
 )
 

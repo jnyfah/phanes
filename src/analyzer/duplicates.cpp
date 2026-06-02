@@ -1,7 +1,5 @@
 module;
 
-#include "xxhash.h"
-
 #include <algorithm>
 #include <atomic>
 #include <condition_variable>
@@ -33,6 +31,7 @@ module;
 module analyzer;
 
 import phanes_deque;
+import phanes_hasher;
 
 struct HashError
 {
@@ -62,7 +61,7 @@ static bool is_cloud_placeholder(const std::filesystem::path& path)
 // Fast hash, samples only 12kb
 auto sample_hash_file(const std::filesystem::path& path,
                       std::uintmax_t file_size,
-                      XXH3_state_t* state) -> std::expected<Hash, HashError>
+                      PhanesHashState& state) -> std::expected<Hash, HashError>
 {
     constexpr std::uintmax_t SAMPLE = 4096;
 
@@ -73,7 +72,7 @@ auto sample_hash_file(const std::filesystem::path& path,
         return std::unexpected(HashError{"cannot open: " + path.string()});
     }
 
-    XXH3_64bits_reset(state);
+    phanes_hash_reset(state);
 
     char buf[SAMPLE];
 
@@ -81,7 +80,7 @@ auto sample_hash_file(const std::filesystem::path& path,
     ssize_t n = ::pread(fd, buf, SAMPLE, 0);
     if (n > 0)
     {
-        XXH3_64bits_update(state, buf, static_cast<size_t>(n));
+        phanes_hash_update(state, reinterpret_cast<const std::uint8_t*>(buf), static_cast<size_t>(n));
     }
 
     // middle
@@ -90,7 +89,7 @@ auto sample_hash_file(const std::filesystem::path& path,
         n = ::pread(fd, buf, SAMPLE, static_cast<off_t>(file_size / 2 - SAMPLE / 2));
         if (n > 0)
         {
-            XXH3_64bits_update(state, buf, static_cast<size_t>(n));
+            phanes_hash_update(state, reinterpret_cast<const std::uint8_t*>(buf), static_cast<size_t>(n));
         }
     }
 
@@ -100,12 +99,12 @@ auto sample_hash_file(const std::filesystem::path& path,
         n = ::pread(fd, buf, SAMPLE, static_cast<off_t>(file_size) - static_cast<off_t>(SAMPLE));
         if (n > 0)
         {
-            XXH3_64bits_update(state, buf, static_cast<size_t>(n));
+            phanes_hash_update(state, reinterpret_cast<const std::uint8_t*>(buf), static_cast<size_t>(n));
         }
     }
 
     ::close(fd);
-    return XXH3_64bits_digest(state);
+    return phanes_hash_digest(state);
 
 #else
     std::ifstream file(path, std::ios::binary);
@@ -114,14 +113,14 @@ auto sample_hash_file(const std::filesystem::path& path,
         return std::unexpected(HashError{"cannot open: " + path.string()});
     }
 
-    XXH3_64bits_reset(state);
+    phanes_hash_reset(state);
 
     char buf[SAMPLE];
 
     file.read(buf, SAMPLE);
     if (file.gcount() > 0)
     {
-        XXH3_64bits_update(state, buf, static_cast<size_t>(file.gcount()));
+        phanes_hash_update(state, reinterpret_cast<const std::uint8_t*>(buf), static_cast<size_t>(file.gcount()));
     }
 
     if (file_size > 3 * SAMPLE)
@@ -130,7 +129,7 @@ auto sample_hash_file(const std::filesystem::path& path,
         file.read(buf, SAMPLE);
         if (file.gcount() > 0)
         {
-            XXH3_64bits_update(state, buf, static_cast<size_t>(file.gcount()));
+            phanes_hash_update(state, reinterpret_cast<const std::uint8_t*>(buf), static_cast<size_t>(file.gcount()));
         }
     }
 
@@ -140,16 +139,16 @@ auto sample_hash_file(const std::filesystem::path& path,
         file.read(buf, SAMPLE);
         if (file.gcount() > 0)
         {
-            XXH3_64bits_update(state, buf, static_cast<size_t>(file.gcount()));
+            phanes_hash_update(state, reinterpret_cast<const std::uint8_t*>(buf), static_cast<size_t>(file.gcount()));
         }
     }
 
-    return XXH3_64bits_digest(state);
+    return phanes_hash_digest(state);
 #endif
 }
 
 // Full file hash
-auto hash_file(const std::filesystem::path& path, XXH3_state_t* state) -> std::expected<Hash, HashError>
+auto hash_file(const std::filesystem::path& path, PhanesHashState& state) -> std::expected<Hash, HashError>
 {
 #ifdef __unix__
     int fd = ::open(path.c_str(), O_RDONLY);
@@ -158,13 +157,13 @@ auto hash_file(const std::filesystem::path& path, XXH3_state_t* state) -> std::e
         return std::unexpected(HashError{"cannot open: " + path.string()});
     }
 
-    XXH3_64bits_reset(state);
+    phanes_hash_reset(state);
 
     char buf[262144];
     ssize_t n;
     while ((n = ::read(fd, buf, sizeof(buf))) > 0)
     {
-        XXH3_64bits_update(state, buf, static_cast<size_t>(n));
+        phanes_hash_update(state, reinterpret_cast<const std::uint8_t*>(buf), static_cast<size_t>(n));
     }
 
     ::close(fd);
@@ -174,7 +173,7 @@ auto hash_file(const std::filesystem::path& path, XXH3_state_t* state) -> std::e
         return std::unexpected(HashError{"read error: " + path.string()});
     }
 
-    return XXH3_64bits_digest(state);
+    return phanes_hash_digest(state);
 #else
     std::ifstream file(path, std::ios::binary);
     if (!file)
@@ -182,15 +181,15 @@ auto hash_file(const std::filesystem::path& path, XXH3_state_t* state) -> std::e
         return std::unexpected(HashError{"cannot open: " + path.string()});
     }
 
-    XXH3_64bits_reset(state);
+    phanes_hash_reset(state);
 
     char buf[262144];
     while (file.read(buf, sizeof(buf)) || file.gcount() > 0)
     {
-        XXH3_64bits_update(state, buf, static_cast<size_t>(file.gcount()));
+        phanes_hash_update(state, reinterpret_cast<const std::uint8_t*>(buf), static_cast<size_t>(file.gcount()));
     }
 
-    return XXH3_64bits_digest(state);
+    return phanes_hash_digest(state);
 #endif
 }
 
@@ -253,7 +252,7 @@ std::generator<DuplicateGroup> compute_duplicate_groups(const DirectoryTree& tre
 
     auto worker = [&]()
     {
-        XXH3_state_t* state = XXH3_createState();
+        PhanesHashState state; // one per thread, reused across every file (reset per hash)
 
         while (!tasks.empty())
         {
@@ -335,7 +334,6 @@ std::generator<DuplicateGroup> compute_duplicate_groups(const DirectoryTree& tre
             }
         }
 
-        XXH3_freeState(state);
         // last thread out signals the generator body to stop waiting
         if (++finished == n_threads)
         {

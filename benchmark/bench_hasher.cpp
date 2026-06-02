@@ -1,5 +1,3 @@
-#include "xxhash.h"
-
 #include <benchmark/benchmark.h>
 #include <cstdint>
 #include <vector>
@@ -47,17 +45,6 @@ static void BM_PhanesHash_1MB(benchmark::State& bstate)
 }
 BENCHMARK(BM_PhanesHash_1MB)->Unit(benchmark::kMicrosecond);
 
-static void BM_XXHash_1MB(benchmark::State& state)
-{
-    for (auto _ : state)
-    {
-        benchmark::DoNotOptimize(DATA_1MB.data());
-        benchmark::DoNotOptimize(XXH3_64bits(DATA_1MB.data(), DATA_1MB.size()));
-    }
-    state.SetBytesProcessed(state.iterations() * static_cast<int64_t>(DATA_1MB.size()));
-}
-BENCHMARK(BM_XXHash_1MB)->Unit(benchmark::kMicrosecond);
-
 // ============================================================
 // 12KB — the sample_hash_file hot path
 // ============================================================
@@ -76,13 +63,3 @@ static void BM_PhanesHash_12KB(benchmark::State& bstate)
 }
 BENCHMARK(BM_PhanesHash_12KB)->Unit(benchmark::kMicrosecond);
 
-static void BM_XXHash_12KB(benchmark::State& state)
-{
-    for (auto _ : state)
-    {
-        benchmark::DoNotOptimize(DATA_12KB.data());
-        benchmark::DoNotOptimize(XXH3_64bits(DATA_12KB.data(), DATA_12KB.size()));
-    }
-    state.SetBytesProcessed(state.iterations() * static_cast<int64_t>(DATA_12KB.size()));
-}
-BENCHMARK(BM_XXHash_12KB)->Unit(benchmark::kMicrosecond);

@@ -13,17 +13,6 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 
-include(FetchContent)
-
-FetchContent_Declare(
-    xxhash
-    GIT_REPOSITORY https://github.com/Cyan4973/xxHash.git
-    GIT_TAG        dev
-    SOURCE_SUBDIR  build/cmake
-)
-set(XXHASH_BUILD_XXHSUM OFF CACHE BOOL "Don't build the xxhsum CLI" FORCE)
-FetchContent_MakeAvailable(xxhash)
-
 enable_testing()
 
 # AVX2 is required by the SIMD hash in analyzer/hasher.cpp
