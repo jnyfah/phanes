@@ -23,8 +23,10 @@ add_compile_options(
 
 add_subdirectory(src)
 
-# todo tests should be optional?
-add_subdirectory(tests)
+option(PHANES_BUILD_TESTS "Build unit tests" ON)
+if(PHANES_BUILD_TESTS)
+    add_subdirectory(tests)
+endif()
 
 option(PHANES_BUILD_BENCHMARKS "Build Google Benchmark benchmarks" OFF)
 if(PHANES_BUILD_BENCHMARKS)

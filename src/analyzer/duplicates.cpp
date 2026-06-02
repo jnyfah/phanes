@@ -40,18 +40,17 @@ struct HashError
 using Hash = std::uint64_t;
 
 // On Windows, OneDrive "Files On-Demand" files are placeholders: opening their
-// content triggers a download (hydration). We must NOT hash those — reading them
-// would pull the entire cloud folder to disk. GetFileAttributesW only reads the
-// attribute flags, which is safe (no hydration). Returns false everywhere else.
-static bool is_cloud_placeholder(const std::filesystem::path& path)
+// content triggers a download (hydration). We do NOT hash those 
+static auto is_cloud_placeholder(const std::filesystem::path& path) -> bool
 {
 #ifdef _WIN32
     const DWORD attrs = GetFileAttributesW(path.c_str());
     if (attrs == INVALID_FILE_ATTRIBUTES)
+    {
         return false;
-    // offline, or hydrate-on-open, or hydrate-on-read — all mean "not local yet"
-    return (attrs & (FILE_ATTRIBUTE_OFFLINE | FILE_ATTRIBUTE_RECALL_ON_OPEN |
-                     FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS)) != 0;
+    }
+    return (attrs & (FILE_ATTRIBUTE_OFFLINE | FILE_ATTRIBUTE_RECALL_ON_OPEN | FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS)) !=
+        0;
 #else
     (void)path;
     return false;
