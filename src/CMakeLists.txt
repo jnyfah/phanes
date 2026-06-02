@@ -1,5 +1,5 @@
 # Core module target
-add_library(phanes_core)
+add_library(phanes_core STATIC)
 
 target_sources(phanes_core
   PUBLIC
