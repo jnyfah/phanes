@@ -21,9 +21,7 @@ static constexpr uint64_t seed = 0;
 
 export struct PhanesHashState
 {
-    __m256i acc[8]; // eight independent SIMD accumulators — eight separate dependency
-                    // chains. MSVC's scheduler needs more explicit chains than clang's
-                    // to hide the long mul64+rotate latency, so more can be faster there.
+    __m256i acc[4];
     uint8_t buffer[32];
     size_t buf_used;
     size_t total_len;
@@ -50,10 +48,6 @@ export void phanes_hash_reset(PhanesHashState& state)
     state.acc[1] = _mm256_set_epi64x(seed + PRIME_3, seed - PRIME_2, seed + PRIME_1, seed + PRIME_3 + PRIME_1);
     state.acc[2] = _mm256_set_epi64x(seed + PRIME_1, seed + PRIME_3, seed - PRIME_2, seed + PRIME_2 + PRIME_3);
     state.acc[3] = _mm256_set_epi64x(seed - PRIME_3, seed + PRIME_1 + PRIME_3, seed + PRIME_2, seed - PRIME_2);
-    state.acc[4] = _mm256_set_epi64x(seed + PRIME_2, seed - PRIME_3, seed + PRIME_1 + PRIME_2, seed + PRIME_3);
-    state.acc[5] = _mm256_set_epi64x(seed + PRIME_1 + PRIME_2, seed + PRIME_2, seed - PRIME_1, seed + PRIME_3);
-    state.acc[6] = _mm256_set_epi64x(seed - PRIME_2, seed + PRIME_1, seed + PRIME_3, seed + PRIME_1 + PRIME_3);
-    state.acc[7] = _mm256_set_epi64x(seed + PRIME_3, seed + PRIME_1 + PRIME_2, seed - PRIME_3, seed + PRIME_1);
     state.buf_used = 0;
     state.total_len = 0;
 
@@ -108,25 +102,25 @@ export void phanes_hash_update(PhanesHashState& state, const uint8_t* data, size
     __m256i v1 = state.acc[1];
     __m256i v2 = state.acc[2];
     __m256i v3 = state.acc[3];
-    __m256i v4 = state.acc[4];
-    __m256i v5 = state.acc[5];
-    __m256i v6 = state.acc[6];
-    __m256i v7 = state.acc[7];
 
     size_t blocks = state.blocks;
 
     auto fold = [&](size_t idx, __m256i w)
     {
-        switch (idx & 7)
+        switch (idx & 3)
         {
-        case 0: v0 = mix(v0, w, p1_lo, p1_hi, p2_lo, p2_hi); break;
-        case 1: v1 = mix(v1, w, p1_lo, p1_hi, p2_lo, p2_hi); break;
-        case 2: v2 = mix(v2, w, p1_lo, p1_hi, p2_lo, p2_hi); break;
-        case 3: v3 = mix(v3, w, p1_lo, p1_hi, p2_lo, p2_hi); break;
-        case 4: v4 = mix(v4, w, p1_lo, p1_hi, p2_lo, p2_hi); break;
-        case 5: v5 = mix(v5, w, p1_lo, p1_hi, p2_lo, p2_hi); break;
-        case 6: v6 = mix(v6, w, p1_lo, p1_hi, p2_lo, p2_hi); break;
-        case 7: v7 = mix(v7, w, p1_lo, p1_hi, p2_lo, p2_hi); break;
+        case 0:
+            v0 = mix(v0, w, p1_lo, p1_hi, p2_lo, p2_hi);
+            break;
+        case 1:
+            v1 = mix(v1, w, p1_lo, p1_hi, p2_lo, p2_hi);
+            break;
+        case 2:
+            v2 = mix(v2, w, p1_lo, p1_hi, p2_lo, p2_hi);
+            break;
+        case 3:
+            v3 = mix(v3, w, p1_lo, p1_hi, p2_lo, p2_hi);
+            break;
         }
     };
 
@@ -154,26 +148,34 @@ export void phanes_hash_update(PhanesHashState& state, const uint8_t* data, size
     }
     size_t i = 0;
 
-    // realign so the 8x loop starts on a block index that's a multiple of 8
-    while ((blocks & 7) != 0 && i + 32 <= len)
+    // realign so the 4x loop starts on a block index that's a multiple of 4
+    while ((blocks & 3) != 0 && i + 32 <= len)
     {
         fold(blocks, _mm256_loadu_si256((const __m256i*)(data + i)));
+
         ++blocks;
+
         i += 32;
     }
 
-    // 8x unrolled — eight independent chains run in parallel via ILP (256 bytes/iter)
-    for (; i + 256 <= len; i += 256)
+    for (; i + 128 <= len; i += 128)
     {
-        v0 = mix(v0, _mm256_loadu_si256((const __m256i*)(data + i + 0)), p1_lo, p1_hi, p2_lo, p2_hi);
-        v1 = mix(v1, _mm256_loadu_si256((const __m256i*)(data + i + 32)), p1_lo, p1_hi, p2_lo, p2_hi);
-        v2 = mix(v2, _mm256_loadu_si256((const __m256i*)(data + i + 64)), p1_lo, p1_hi, p2_lo, p2_hi);
-        v3 = mix(v3, _mm256_loadu_si256((const __m256i*)(data + i + 96)), p1_lo, p1_hi, p2_lo, p2_hi);
-        v4 = mix(v4, _mm256_loadu_si256((const __m256i*)(data + i + 128)), p1_lo, p1_hi, p2_lo, p2_hi);
-        v5 = mix(v5, _mm256_loadu_si256((const __m256i*)(data + i + 160)), p1_lo, p1_hi, p2_lo, p2_hi);
-        v6 = mix(v6, _mm256_loadu_si256((const __m256i*)(data + i + 192)), p1_lo, p1_hi, p2_lo, p2_hi);
-        v7 = mix(v7, _mm256_loadu_si256((const __m256i*)(data + i + 224)), p1_lo, p1_hi, p2_lo, p2_hi);
-        blocks += 8;
+        __m256i w0 = _mm256_loadu_si256((const __m256i*)(data + i));
+
+        __m256i w1 = _mm256_loadu_si256((const __m256i*)(data + i + 32));
+
+        __m256i w2 = _mm256_loadu_si256((const __m256i*)(data + i + 64));
+
+        __m256i w3 = _mm256_loadu_si256((const __m256i*)(data + i + 96));
+
+        v0 = mix(v0, w0, p1_lo, p1_hi, p2_lo, p2_hi);
+
+        v1 = mix(v1, w1, p1_lo, p1_hi, p2_lo, p2_hi);
+
+        v2 = mix(v2, w2, p1_lo, p1_hi, p2_lo, p2_hi);
+
+        v3 = mix(v3, w3, p1_lo, p1_hi, p2_lo, p2_hi);
+        blocks += 4;
     }
 
     while (i + 32 <= len)
@@ -188,10 +190,6 @@ export void phanes_hash_update(PhanesHashState& state, const uint8_t* data, size
     state.acc[1] = v1;
     state.acc[2] = v2;
     state.acc[3] = v3;
-    state.acc[4] = v4;
-    state.acc[5] = v5;
-    state.acc[6] = v6;
-    state.acc[7] = v7;
     state.blocks = blocks;
 
     // copy the overflow into buffer
@@ -202,14 +200,23 @@ export void phanes_hash_update(PhanesHashState& state, const uint8_t* data, size
 
 export auto phanes_hash_digest(PhanesHashState& state) -> uint64_t
 {
-    alignas(32) uint64_t lanes[32];
-    for (int a = 0; a < 8; ++a)
-        _mm256_store_si256((__m256i*)(lanes + a * 4), state.acc[a]);
+    alignas(32) uint64_t lanes[16];
+    _mm256_store_si256((__m256i*)(lanes + 0), state.acc[0]);
 
-    // fold all 32 lanes — rotate each by a distinct amount in [1,63] so none cancel
+    _mm256_store_si256((__m256i*)(lanes + 4), state.acc[1]);
+
+    _mm256_store_si256((__m256i*)(lanes + 8), state.acc[2]);
+
+    _mm256_store_si256((__m256i*)(lanes + 12), state.acc[3]);
+
+    static constexpr int rots[16] = {1, 7, 12, 18, 23, 27, 31, 36, 41, 45, 50, 54, 2, 9, 15, 20};
+
     uint64_t h64 = 0;
-    for (int j = 0; j < 32; ++j)
-        h64 += rotate_left(lanes[j], 1 + (j * 2) % 63);
+
+    for (int j = 0; j < 16; ++j)
+    {
+        h64 += rotate_left(lanes[j], rots[j]);
+    }
 
     h64 += state.total_len;
 
