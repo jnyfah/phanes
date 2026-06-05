@@ -358,7 +358,7 @@ void print_duplicates(std::ostream& os, const std::vector<DuplicateGroup>& group
     for (std::size_t i = 0; i < groups.size(); ++i)
     {
         const auto& group = groups[i];
-        std::println(os, "Group {} — {} copies — {} each", i + 1, group.files.size(), format_size(group.size));
+        std::println(os, "Group {} - {} copies - {} each", i + 1, group.files.size(), format_size(group.size));
         for (FileId id : group.files)
         {
             std::println(os, "  {}", tree.files[id].path.string());
@@ -369,7 +369,7 @@ void print_duplicates(std::ostream& os, const std::vector<DuplicateGroup>& group
 
 void print_duplicate_group(std::ostream& os, const DuplicateGroup& group, const DirectoryTree& tree, std::size_t index)
 {
-    std::println(os, "Group {} — {} copies — {} each", index, group.files.size(), format_size(group.size));
+    std::println(os, "Group {} - {} copies - {} each", index, group.files.size(), format_size(group.size));
     for (FileId id : group.files)
     {
         std::println(os, "  {}", tree.files[id].path.string());

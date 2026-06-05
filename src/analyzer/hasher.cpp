@@ -151,6 +151,7 @@ export void phanes_hash_update(PhanesHashState& state, const uint8_t* data, size
         i += 32;
     }
 
+    // main loop
     for (; i + 128 <= len; i += 128)
     {
         __m256i w0 = _mm256_loadu_si256((const __m256i*)(data + i));
@@ -193,6 +194,7 @@ export void phanes_hash_update(PhanesHashState& state, const uint8_t* data, size
 
 export auto phanes_hash_digest(const PhanesHashState& state) -> uint64_t
 {
+    // split so we can structure back to 64bit
     alignas(32) uint64_t lanes[16];
     _mm256_store_si256((__m256i*)(lanes + 0), state.acc[0]);
 
