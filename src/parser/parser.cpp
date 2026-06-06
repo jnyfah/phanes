@@ -122,6 +122,11 @@ auto handle_stats(std::optional<std::string_view>) -> std::expected<Action, std:
     return StatsAction{};
 }
 
+auto handle_duplicates(std::optional<std::string_view>) -> std::expected<Action, std::string>
+{
+    return DuplicateAction{};
+}
+
 auto parse_positive_size(std::string_view str, std::string_view flag_name) -> std::expected<size_t, std::string>
 {
     if (str.empty())

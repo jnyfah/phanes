@@ -331,3 +331,54 @@ void print_directory_metrics(std::ostream& os, const DirectoryMetrics& metrics, 
 
     std::println(os);
 }
+
+void print_duplicates(std::ostream& os, const std::vector<DuplicateGroup>& groups, const DirectoryTree& tree)
+{
+    if (groups.empty())
+    {
+        std::println(os, "No duplicate files found.");
+        return;
+    }
+
+    std::size_t total_files = 0;
+    std::uintmax_t wasted = 0;
+    for (const auto& g : groups)
+    {
+        total_files += g.files.size();
+        wasted += g.size * (g.files.size() - 1);
+    }
+
+    std::println(os,
+                 "Duplicate Files ({} groups, {} files, {} wasted)",
+                 groups.size(),
+                 total_files,
+                 format_size(wasted));
+    std::println(os, "--------------------------------------------\n");
+
+    for (std::size_t i = 0; i < groups.size(); ++i)
+    {
+        const auto& group = groups[i];
+        std::println(os, "Group {} - {} copies - {} each", i + 1, group.files.size(), format_size(group.size));
+        for (FileId id : group.files)
+        {
+            std::println(os, "  {}", tree.files[id].path.string());
+        }
+        std::println(os);
+    }
+}
+
+void print_duplicate_group(std::ostream& os, const DuplicateGroup& group, const DirectoryTree& tree, std::size_t index)
+{
+    std::println(os, "Group {} - {} copies - {} each", index, group.files.size(), format_size(group.size));
+    for (FileId id : group.files)
+    {
+        std::println(os, "  {}", tree.files[id].path.string());
+    }
+    std::println(os);
+}
+
+void print_duplicate_footer(std::ostream& os, std::size_t group_count, std::size_t total_files, std::uintmax_t wasted)
+{
+    std::println(os, "--------------------------------------------");
+    std::println(os, "Total: {} groups, {} files, {} wasted", group_count, total_files, format_size(wasted));
+}

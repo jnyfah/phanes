@@ -1,5 +1,5 @@
 # Core module target
-add_library(phanes_core)
+add_library(phanes_core STATIC)
 
 target_sources(phanes_core
   PUBLIC
@@ -10,12 +10,14 @@ target_sources(phanes_core
       builder/scheduler.cpp 
       builder/deque.cpp 
       analyzer/analyzer.ixx
+      analyzer/hasher.cpp
       parser/parser.ixx
       view/view.ixx
       view/executor.ixx
   PRIVATE
       builder/builder.cpp
       analyzer/analyzer.cpp
+      analyzer/duplicates.cpp
       parser/parser.cpp
       view/view.cpp
 )

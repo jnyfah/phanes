@@ -11,7 +11,9 @@ Phanes is a fast, multithreaded command-line tool for analyzing filesystem struc
 
 - Parallel directory scanning via a lock-free work-stealing thread pool
 - Concurrent action dispatch: multiple report types computed simultaneously
-- Google Benchmark suite covering the analyzer, parallel scanner, and lock-free deque
+- Duplicate file detection: size grouping → multi-sample hashing → full-content verification, parallelized across files and streamed to output as matches are confirmed
+- Custom SIMD (AVX2) content hash with four independent accumulators, written for this workload
+- Google Benchmark suite covering the analyzer, parallel scanner, lock-free deque, duplicate scanner, and hash function
 
 ---
 
@@ -44,7 +46,29 @@ cmake --preset msvc-release
 cmake --build --preset msvc-release
 ```
 
-The binary is placed in `build/<preset>/phanes` (or `phanes.exe` on Windows).
+The binary is placed in `build/<preset>/bin/phanes` (or `phanes.exe` on Windows).
+
+### Build options
+
+| Option | Default | Effect |
+|---|---|---|
+| `PHANES_BUILD_TESTS` | `ON` | Build the GoogleTest unit tests |
+| `PHANES_BUILD_BENCHMARKS` | `OFF` | Build the Google Benchmark suite |
+
+```bash
+# Library + CLI only, no test dependencies fetched
+cmake --preset ninja-release -DPHANES_BUILD_TESTS=OFF
+```
+
+### Tests
+
+Tests build by default and are registered with CTest:
+
+```bash
+cmake --preset ninja-release
+cmake --build --preset ninja-release
+ctest --preset ninja-release
+```
 
 ---
 
@@ -70,6 +94,7 @@ At least one flag is required. Multiple flags can be combined freely and each re
 | `--errors` | — | Filesystem entries that could not be accessed |
 | `--metrics` | — | Per-directory depth, recursive size, and file count |
 | `--stats` | — | Aggregate statistics: deepest path, largest directory, averages |
+| `--duplicates` | — | Groups of byte-for-byte identical files, with total wasted space |
 
 ### Examples
 
@@ -82,6 +107,9 @@ phanes /home/user --largest-files 10 --extensions
 
 # See what changed in the last hour and check for errors
 phanes /var/log --recent 1h --errors
+
+# Find duplicate files and how much space they waste
+phanes /home/user --duplicates
 
 # Full report
 phanes /srv --summary --largest-files 20 --largest-dirs 10 --extensions --metrics --stats
@@ -96,6 +124,8 @@ The benchmark suite uses [Google Benchmark](https://github.com/google/benchmark)
 - **Analyzer** — scalability of each analysis algorithm (file stats, directory metrics, extension breakdown, recent files, top-N queries, summary) as directory count grows
 - **Builder** — parallel scanner performance across thread counts, task granularities, flat vs nested trees, and balanced vs skewed workloads
 - **LockFreeDeque** — raw push/pop throughput and owner performance under concurrent steal contention
+- **Duplicates** — thread scaling, file-size scaling, and sample-hash filter effectiveness
+- **Hash** — throughput of the custom AVX2 hash on 1MB and 12KB inputs
 
 ### Running
 

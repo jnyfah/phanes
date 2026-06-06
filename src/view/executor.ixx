@@ -129,6 +129,42 @@ export struct Executor
         return out.str();
     }
 
+    std::string operator()(DuplicateAction) const
+    {
+        auto t0 = std::chrono::steady_clock::now();
+        std::ostringstream out;
+
+        std::size_t group_count = 0;
+        std::size_t total_files = 0;
+        std::uintmax_t wasted = 0;
+
+        std::println(out, "Duplicate Files");
+        std::println(out, "--------------------------------------------\n");
+
+        for (auto&& group : compute_duplicate_groups(tree))
+        {
+            ++group_count;
+            total_files += group.files.size();
+            wasted += group.size * (group.files.size() - 1);
+            print_duplicate_group(out, group, tree, group_count);
+        }
+
+        if (group_count == 0)
+        {
+            std::println(out, "No duplicate files found.");
+        }
+        else
+        {
+            print_duplicate_footer(out, group_count, total_files, wasted);
+        }
+
+        auto t1 = std::chrono::steady_clock::now();
+        auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
+        std::println(out, "[timing] duplicate scan took {} ms", ms);
+
+        return out.str();
+    }
+
     void run(const std::vector<Action>& actions) const
     {
         // compute shared data in parallel
