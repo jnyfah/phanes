@@ -122,7 +122,7 @@ class LockFreeDeque
 
     auto steal_front() noexcept -> std::optional<T>
     {
-        auto f = front.load(std::memory_order_relaxed); // we have so many thieves os sync with them  but //
+        auto f = front.load(std::memory_order_relaxed); // we have so many thieves os sync with them  but
         std::atomic_thread_fence(std::memory_order_seq_cst);
         auto b = back.load(std::memory_order_acquire); // sync with owner thread
 
