@@ -239,7 +239,7 @@ std::generator<DuplicateGroup> compute_duplicate_groups(const DirectoryTree& tre
     const std::size_t hw = std::max(1u, std::thread::hardware_concurrency());
     const std::size_t n_threads = (num_threads == 0) ? hw * 2 : std::max(std::size_t{1}, num_threads);
 
-    auto tasks_owner = std::make_unique<LockFreeDeque<std::size_t>>();
+    auto tasks_owner = std::make_unique<LockFreeDeque<std::size_t>>(1024, n_threads);
     auto& tasks = *tasks_owner;
     for (std::size_t i = 0; i < total; ++i)
     {
@@ -251,13 +251,13 @@ std::generator<DuplicateGroup> compute_duplicate_groups(const DirectoryTree& tre
     std::deque<DuplicateGroup> ready;
     std::atomic<std::size_t> finished{0};
 
-    auto worker = [&]()
+    auto worker = [&](std::size_t id)
     {
         PhanesHashState state; // one per thread, reused across every file (reset per hash)
 
         while (!tasks.empty())
         {
-            auto idx = tasks.steal_front();
+            auto idx = tasks.steal_front(id);
             if (!idx)
             {
                 continue; // CAS lost to another thread, retry
@@ -347,7 +347,7 @@ std::generator<DuplicateGroup> compute_duplicate_groups(const DirectoryTree& tre
         threads.reserve(n_threads);
         for (std::size_t i = 0; i < n_threads; ++i)
         {
-            threads.emplace_back(worker);
+            threads.emplace_back(worker, i);
         }
 
         // drain shared queue while workers run by yielding each confirmed group to the caller

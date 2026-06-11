@@ -54,7 +54,7 @@ class ThreadPool
             const size_t victim_id = (self + offset) % N;
             auto& victim = *workers[victim_id];
 
-            auto task_id = victim.tasks.steal_front();
+            auto task_id = victim.tasks.steal_front(self);
             if (!task_id.has_value())
             {
                 continue;
@@ -63,7 +63,7 @@ class ThreadPool
             size_t steal_count = victim.tasks.size() / 2;
             for (size_t j = 0; j < steal_count; ++j)
             {
-                auto t = victim.tasks.steal_front();
+                auto t = victim.tasks.steal_front(self);
                 if (!t)
                 {
                     break;

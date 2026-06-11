@@ -1,15 +1,32 @@
 module;
 
+#include <algorithm>
 #include <atomic>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <thread>
 #include <type_traits>
 #include <vector>
 
 export module phanes_deque;
+
+struct HazardPointerDomain
+{
+    std::vector<std::atomic<void*>> slots;
+    explicit HazardPointerDomain(std::size_t n) : slots(n) {}
+};
+
+struct HazardGuard
+{
+    std::atomic<void*>& slot_;
+
+    HazardGuard(std::atomic<void*>& slot, void* ptr) : slot_(slot) { slot_.store(ptr, std::memory_order_release); }
+
+    ~HazardGuard() { slot_.store(nullptr, std::memory_order_release); }
+};
 
 // Typename T here is a trival type of DirectorId (size_t) defined in core, so this deque would only work for trivial
 // types
@@ -48,19 +65,42 @@ class LockFreeDeque
     };
 
   public:
-    explicit LockFreeDeque(std::int64_t cap = 1024)
+    explicit LockFreeDeque(std::int64_t cap = 1024,
+                           std::size_t num_stealers =
+                               std::max(std::size_t{1}, static_cast<std::size_t>(std::thread::hardware_concurrency())))
+        : domain(num_stealers)
     {
-        auto first = std::make_unique<Buffer>(cap);
-        buffer.store(first.get(), std::memory_order_relaxed);
-        oldBuffer.push_back(std::move(first));
+        buffer.store(new Buffer(cap), std::memory_order_relaxed);
     }
 
-    ~LockFreeDeque() = default;
+    ~LockFreeDeque()
+    {
+        delete buffer.load(std::memory_order_relaxed);
+        for (auto* b : oldBuffer)
+        {
+            delete b;
+        }
+    }
 
     LockFreeDeque(const LockFreeDeque&) = delete;
     auto operator=(const LockFreeDeque&) -> LockFreeDeque& = delete;
     LockFreeDeque(LockFreeDeque&&) = delete;
     auto operator=(LockFreeDeque&&) -> LockFreeDeque& = delete;
+
+    auto try_free(Buffer* buf) -> bool
+    {
+        for (auto& slot : domain.slots)
+        {
+            if (slot.load(std::memory_order_acquire) == buf)
+            {
+                return false; // hazard found, cannot free
+            }
+        }
+
+        // no hazard found, delete
+        delete buf;
+        return true;
+    }
 
     auto push_back(T item) -> void
     {
@@ -74,11 +114,21 @@ class LockFreeDeque
             std::memory_order_relaxed); // buffer is only written to by push_back function, so no sync needed
         if (b - f >= buf->capacity)
         {
+            auto old_raw = buf;
             auto next = buf->resize(f, b);
-            Buffer* next_raw = next.get();
-            oldBuffer.push_back(std::move(next));
+            Buffer* next_raw = next.release();
             buffer.store(next_raw, std::memory_order_release); // sync with other threads that will read this
             buf = next_raw;
+
+            if (!try_free(old_raw))
+            {
+                oldBuffer.push_back(old_raw);
+            }
+
+            // also try to free anything previously deferred
+            oldBuffer.erase(
+                std::remove_if(oldBuffer.begin(), oldBuffer.end(), [this](Buffer* b) { return try_free(b); }),
+                oldBuffer.end());
         }
 
         buf->data[b & buf->mask] = item;
@@ -120,8 +170,10 @@ class LockFreeDeque
         return buf->data[b & buf->mask];
     }
 
-    auto steal_front() noexcept -> std::optional<T>
+    auto steal_front(size_t id) noexcept -> std::optional<T>
     {
+        assert(id < domain.slots.size() && "stealer id out of range for hazard domain");
+
         auto f = front.load(std::memory_order_relaxed); // we have so many thieves os sync with them  but
         std::atomic_thread_fence(std::memory_order_seq_cst);
         auto b = back.load(std::memory_order_acquire); // sync with owner thread
@@ -132,6 +184,16 @@ class LockFreeDeque
         }
 
         auto* buf = buffer.load(std::memory_order_relaxed);
+
+        HazardGuard guard(domain.slots[id], buf);
+        std::atomic_thread_fence(std::memory_order_seq_cst);
+
+        // validate
+        if (buffer.load(std::memory_order_acquire) != buf)
+        {
+            return std::nullopt;
+        }
+
         const T value = buf->data[f & buf->mask];
 
         if (!front.compare_exchange_strong(f, f + 1, std::memory_order_seq_cst, std::memory_order_relaxed))
@@ -161,5 +223,6 @@ class LockFreeDeque
     alignas(64) std::atomic<std::int64_t> front{0};
     alignas(64) std::atomic<std::int64_t> back{0};
     alignas(64) std::atomic<Buffer*> buffer;
-    std::vector<std::unique_ptr<Buffer>> oldBuffer;
+    std::vector<Buffer*> oldBuffer;
+    HazardPointerDomain domain;
 };

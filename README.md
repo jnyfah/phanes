@@ -5,6 +5,8 @@
 
 Phanes is a fast, multithreaded command-line tool for analyzing filesystem structure. It scans directories in parallel and produces detailed reports on file sizes, types, modification times, symlinks, errors, and directory metrics, all from a single pass.
 
+> Curious how it works under the hood? See [ARCHITECTURE.md](ARCHITECTURE.md) for the module layout, data model, threading model, and design decisions.
+
 ---
 
 ## Features
