@@ -29,6 +29,12 @@ struct EpochDomain
             epoch.store(kInactive, std::memory_order_relaxed);
         }
     }
+
+    // atomics cannot be copied, make that explicit
+    EpochDomain(const EpochDomain&) = delete;
+    auto operator=(const EpochDomain&) -> EpochDomain& = delete;
+    EpochDomain(EpochDomain&&) = delete;
+    auto operator=(EpochDomain&&) -> EpochDomain& = delete;
 };
 
 // RAAI guard
@@ -96,13 +102,6 @@ class LockFreeDeque
     ~LockFreeDeque()
     {
         delete buffer.load(std::memory_order_relaxed);
-        for (auto& buf : retired)
-        {
-            for (auto* b : buf)
-            {
-                delete b;
-            }
-        }
     }
 
     LockFreeDeque(const LockFreeDeque&) = delete;
@@ -219,14 +218,14 @@ class LockFreeDeque
     auto retire(Buffer* buf) -> void
     {
         const auto global_epoch = domain.global_epoch.load(std::memory_order_relaxed);
-        retired[global_epoch % 3].push_back(buf); // put the old buffer in the retired list for this epoch
+        retired[global_epoch % 3].push_back(std::unique_ptr<Buffer>(buf)); // put the old buffer in the retired list for this epoch
         try_advance_epoch(global_epoch); // try to advance the epoch, which may free some retired buffers if no hazard exists
     }
 
     auto try_advance_epoch(std::uint64_t current_epoch) -> void
     {
         const auto next_epoch = current_epoch + 1;
-        for (auto& slot : domain.local_epochs)
+        for (const auto& slot : domain.local_epochs)
         {
             const auto local_epoch = slot.load(std::memory_order_seq_cst);
             if (local_epoch != EpochDomain::kInactive && local_epoch != current_epoch)
@@ -239,18 +238,14 @@ class LockFreeDeque
         domain.global_epoch.store(next_epoch, std::memory_order_release);
 
         // free buffer from two epochs ago
-        auto& to_free = retired[(next_epoch+1) % 3];
-        for (auto* buf : to_free)
-        {
-            delete buf;
-        }
-        to_free.clear();
+        auto& to_free = retired[(next_epoch + 1) % 3];
+        to_free.clear(); 
     }
 
 
     alignas(64) std::atomic<std::int64_t> front{0};
     alignas(64) std::atomic<std::int64_t> back{0};
     alignas(64) std::atomic<Buffer*> buffer;
-    std::array<std::vector<Buffer*>, 3> retired;
+    std::array<std::vector<std::unique_ptr<Buffer>>, 3> retired;
     EpochDomain domain;
 };
