@@ -13,6 +13,10 @@ module;
 
 export module phanes_deque;
 
+struct alignas(64) PaddedEpoch {
+    std::atomic<std::uint64_t> value{EpochDomain::kInactive};
+};
+
 struct EpochDomain
 {
     // UINT64_MAX is used to indicate that a thread is not currently active in the epoch domain.
@@ -20,7 +24,7 @@ struct EpochDomain
 
     alignas(64) std::atomic<std::uint64_t> global_epoch{0};
 
-    std::vector<std::atomic<std::uint64_t>> local_epochs;
+   std::vector<PaddedEpoch> local_epochs;
 
     explicit EpochDomain(std::size_t n) : local_epochs(n)
     {
@@ -93,7 +97,7 @@ class LockFreeDeque
   public:
     explicit LockFreeDeque(std::int64_t cap = 1024,
                            std::size_t num_stealers =
-                               std::max(std::size_t{1}, static_cast<std::size_t>(std::thread::hardware_concurrency())))
+                               std::max(std::size_t{1}, static_cast<std::size_t>(std::jthread::hardware_concurrency())))
         : domain(num_stealers)
     {
         buffer.store(new Buffer(cap), std::memory_order_relaxed);
