@@ -13,7 +13,8 @@ module;
 
 export module phanes_deque;
 
-struct alignas(64) PaddedEpoch {
+struct alignas(64) PaddedEpoch
+{
     std::atomic<std::uint64_t> value{EpochDomain::kInactive};
 };
 
@@ -24,7 +25,7 @@ struct EpochDomain
 
     alignas(64) std::atomic<std::uint64_t> global_epoch{0};
 
-   std::vector<PaddedEpoch> local_epochs;
+    std::vector<PaddedEpoch> local_epochs;
 
     explicit EpochDomain(std::size_t n) : local_epochs(n)
     {
@@ -46,16 +47,12 @@ struct EpochGuard
 {
     std::atomic<std::uint64_t>& slot;
 
-    EpochGuard(std::atomic<std::uint64_t>& local_epoch, std::uint64_t global_epoch)
-        : slot(local_epoch)
+    EpochGuard(std::atomic<std::uint64_t>& local_epoch, std::uint64_t global_epoch) : slot(local_epoch)
     {
         slot.store(global_epoch, std::memory_order_release);
     }
 
-    ~EpochGuard()
-    {
-        slot.store(EpochDomain::kInactive, std::memory_order_release);
-    }
+    ~EpochGuard() { slot.store(EpochDomain::kInactive, std::memory_order_release); }
 };
 
 // Typename T here is a trival type of DirectorId (size_t) defined in core, so this deque would only work for trivial
@@ -103,10 +100,7 @@ class LockFreeDeque
         buffer.store(new Buffer(cap), std::memory_order_relaxed);
     }
 
-    ~LockFreeDeque()
-    {
-        delete buffer.load(std::memory_order_relaxed);
-    }
+    ~LockFreeDeque() { delete buffer.load(std::memory_order_relaxed); }
 
     LockFreeDeque(const LockFreeDeque&) = delete;
     auto operator=(const LockFreeDeque&) -> LockFreeDeque& = delete;
@@ -186,7 +180,7 @@ class LockFreeDeque
             return std::nullopt; // empty, nothing to steal
         }
 
-         // Pin the current epoch before we read the buffer, so that the buffer is not freed while we are reading it
+        // Pin the current epoch before we read the buffer, so that the buffer is not freed while we are reading it
         EpochGuard guard(domain.local_epochs[id], domain.global_epoch.load(std::memory_order_seq_cst));
         std::atomic_thread_fence(std::memory_order_seq_cst);
 
@@ -218,12 +212,13 @@ class LockFreeDeque
     }
 
   private:
-
     auto retire(Buffer* buf) -> void
     {
         const auto global_epoch = domain.global_epoch.load(std::memory_order_relaxed);
-        retired[global_epoch % 3].push_back(std::unique_ptr<Buffer>(buf)); // put the old buffer in the retired list for this epoch
-        try_advance_epoch(global_epoch); // try to advance the epoch, which may free some retired buffers if no hazard exists
+        retired[global_epoch % 3].push_back(
+            std::unique_ptr<Buffer>(buf)); // put the old buffer in the retired list for this epoch
+        try_advance_epoch(
+            global_epoch); // try to advance the epoch, which may free some retired buffers if no hazard exists
     }
 
     auto try_advance_epoch(std::uint64_t current_epoch) -> void
@@ -243,9 +238,8 @@ class LockFreeDeque
 
         // free buffer from two epochs ago
         auto& to_free = retired[(next_epoch + 1) % 3];
-        to_free.clear(); 
+        to_free.clear();
     }
-
 
     alignas(64) std::atomic<std::int64_t> front{0};
     alignas(64) std::atomic<std::int64_t> back{0};
