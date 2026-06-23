@@ -54,6 +54,16 @@ DPI = 180
 # Parsing helpers
 # ---------------------------------------------------------------------------
 
+def resolve_within_base(path: str, base: Path | None = None) -> Path:
+    base = (base or Path.cwd()).resolve()
+    resolved = (base / path).resolve()
+    if resolved != base and base not in resolved.parents:
+        raise ValueError(
+            f"path {path!r} escapes the allowed base directory {str(base)!r}"
+        )
+    return resolved
+
+
 def load_benchmarks(path: str) -> list[dict]:
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
@@ -286,11 +296,16 @@ def main() -> None:
     parser.add_argument("--out", default="benchmark_plots", help="Output directory")
     args = parser.parse_args()
 
-    out = Path(args.out)
+    try:
+        out = resolve_within_base(args.out)
+        results = resolve_within_base(args.results)
+    except ValueError as exc:
+        sys.exit(f"Error: {exc}")
+
     out.mkdir(parents=True, exist_ok=True)
 
-    print(f"Loading {args.results} …")
-    benchmarks = load_benchmarks(args.results)
+    print(f"Loading {results} …")
+    benchmarks = load_benchmarks(str(results))
     print(f"  {len(benchmarks)} benchmark entries loaded")
 
     grouped: dict[str, list[dict]] = defaultdict(list)
