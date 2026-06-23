@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <atomic>
 #include <benchmark/benchmark.h>
 #include <cstddef>
@@ -64,7 +65,7 @@ static void BM_Deque_StealContention(benchmark::State& state)
     const auto num_thieves = static_cast<int>(state.range(0));
     constexpr std::size_t N = 512;
 
-    LockFreeDeque<std::size_t> deque;
+    LockFreeDeque<std::size_t> deque(1024, static_cast<std::size_t>(std::max(1, num_thieves)));
     std::atomic start{false};
     std::atomic stop{false};
 
@@ -74,13 +75,13 @@ static void BM_Deque_StealContention(benchmark::State& state)
     for (int t = 0; t < num_thieves; ++t)
     {
         thieves.emplace_back(
-            [&]() noexcept
+            [&, t]() noexcept
             {
                 while (!start.load(std::memory_order_acquire))
                     std::this_thread::yield();
 
                 while (!stop.load(std::memory_order_relaxed))
-                    benchmark::DoNotOptimize(deque.steal_front());
+                    benchmark::DoNotOptimize(deque.steal_front(static_cast<std::size_t>(t)));
             });
     }
     start.store(true, std::memory_order_release);

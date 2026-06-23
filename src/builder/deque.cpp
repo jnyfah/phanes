@@ -1,15 +1,64 @@
 module;
 
+#include <array>
 #include <atomic>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <thread>
 #include <type_traits>
 #include <vector>
 
 export module phanes_deque;
+
+// UINT64_MAX is used to indicate that a thread is not currently active in the epoch domain.
+inline constexpr std::uint64_t kInactiveEpoch = ~std::uint64_t{0};
+
+struct alignas(64) PaddedEpoch
+{
+    std::atomic<std::uint64_t> value{kInactiveEpoch};
+};
+
+struct EpochDomain
+{
+    static constexpr std::uint64_t kInactive = kInactiveEpoch;
+
+    alignas(64) std::atomic<std::uint64_t> global_epoch{0};
+
+    std::vector<PaddedEpoch> local_epochs;
+
+    explicit EpochDomain(std::size_t n) : local_epochs(n)
+    {
+        for (auto& epoch : local_epochs)
+        {
+            epoch.value.store(kInactive, std::memory_order_relaxed);
+        }
+    }
+
+    // atomics cannot be copied, make that explicit
+    EpochDomain(const EpochDomain&) = delete;
+    auto operator=(const EpochDomain&) -> EpochDomain& = delete;
+    EpochDomain(EpochDomain&&) = delete;
+    auto operator=(EpochDomain&&) -> EpochDomain& = delete;
+};
+
+// RAAI guard
+struct EpochGuard
+{
+    std::atomic<std::uint64_t>& slot;
+
+    EpochGuard(std::atomic<std::uint64_t>& local_epoch, std::uint64_t global_epoch) : slot(local_epoch)
+    {
+        slot.store(global_epoch, std::memory_order_release);
+    }
+
+    ~EpochGuard() { slot.store(EpochDomain::kInactive, std::memory_order_release); }
+
+    EpochGuard(const EpochGuard&) = delete;
+    auto operator=(const EpochGuard&) -> EpochGuard& = delete;
+};
 
 // Typename T here is a trival type of DirectorId (size_t) defined in core, so this deque would only work for trivial
 // types
@@ -48,14 +97,15 @@ class LockFreeDeque
     };
 
   public:
-    explicit LockFreeDeque(std::int64_t cap = 1024)
+    explicit LockFreeDeque(std::int64_t cap = 1024,
+                           std::size_t num_stealers =
+                               std::max(std::size_t{1}, static_cast<std::size_t>(std::jthread::hardware_concurrency())))
+        : domain(num_stealers)
     {
-        auto first = std::make_unique<Buffer>(cap);
-        buffer.store(first.get(), std::memory_order_relaxed);
-        oldBuffer.push_back(std::move(first));
+        buffer.store(new Buffer(cap), std::memory_order_relaxed);
     }
 
-    ~LockFreeDeque() = default;
+    ~LockFreeDeque() { delete buffer.load(std::memory_order_relaxed); }
 
     LockFreeDeque(const LockFreeDeque&) = delete;
     auto operator=(const LockFreeDeque&) -> LockFreeDeque& = delete;
@@ -74,11 +124,13 @@ class LockFreeDeque
             std::memory_order_relaxed); // buffer is only written to by push_back function, so no sync needed
         if (b - f >= buf->capacity)
         {
+            auto old_raw = buf;
             auto next = buf->resize(f, b);
-            Buffer* next_raw = next.get();
-            oldBuffer.push_back(std::move(next));
+            Buffer* next_raw = next.release();
             buffer.store(next_raw, std::memory_order_release); // sync with other threads that will read this
             buf = next_raw;
+
+            retire(old_raw); // hand the old buffer to EBR to free later when no hazard exists
         }
 
         buf->data[b & buf->mask] = item;
@@ -120,8 +172,10 @@ class LockFreeDeque
         return buf->data[b & buf->mask];
     }
 
-    auto steal_front() noexcept -> std::optional<T>
+    auto steal_front(size_t id) noexcept -> std::optional<T>
     {
+        assert(id < domain.local_epochs.size() && "stealer id out of range for hazard domain");
+
         auto f = front.load(std::memory_order_relaxed); // we have so many thieves os sync with them  but
         std::atomic_thread_fence(std::memory_order_seq_cst);
         auto b = back.load(std::memory_order_acquire); // sync with owner thread
@@ -131,7 +185,12 @@ class LockFreeDeque
             return std::nullopt; // empty, nothing to steal
         }
 
+        // Pin the current epoch before we read the buffer, so that the buffer is not freed while we are reading it
+        EpochGuard guard(domain.local_epochs[id].value, domain.global_epoch.load(std::memory_order_seq_cst));
+        std::atomic_thread_fence(std::memory_order_seq_cst);
+
         auto* buf = buffer.load(std::memory_order_relaxed);
+
         const T value = buf->data[f & buf->mask];
 
         if (!front.compare_exchange_strong(f, f + 1, std::memory_order_seq_cst, std::memory_order_relaxed))
@@ -158,8 +217,38 @@ class LockFreeDeque
     }
 
   private:
+    auto retire(Buffer* buf) -> void
+    {
+        const auto global_epoch = domain.global_epoch.load(std::memory_order_relaxed);
+        retired[global_epoch % 3].push_back(
+            std::unique_ptr<Buffer>(buf)); // put the old buffer in the retired list for this epoch
+        try_advance_epoch(
+            global_epoch); // try to advance the epoch, which may free some retired buffers if no hazard exists
+    }
+
+    auto try_advance_epoch(std::uint64_t current_epoch) -> void
+    {
+        const auto next_epoch = current_epoch + 1;
+        for (const auto& slot : domain.local_epochs)
+        {
+            const auto local_epoch = slot.value.load(std::memory_order_seq_cst);
+            if (local_epoch != EpochDomain::kInactive && local_epoch != current_epoch)
+            {
+                return; // found a hazard, cannot advance epoch
+            }
+        }
+
+        // no hazard found, advance epoch
+        domain.global_epoch.store(next_epoch, std::memory_order_release);
+
+        // free buffer from two epochs ago
+        auto& to_free = retired[(next_epoch + 1) % 3];
+        to_free.clear();
+    }
+
     alignas(64) std::atomic<std::int64_t> front{0};
     alignas(64) std::atomic<std::int64_t> back{0};
     alignas(64) std::atomic<Buffer*> buffer;
-    std::vector<std::unique_ptr<Buffer>> oldBuffer;
+    std::array<std::vector<std::unique_ptr<Buffer>>, 3> retired;
+    EpochDomain domain;
 };
