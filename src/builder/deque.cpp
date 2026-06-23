@@ -13,15 +13,17 @@ module;
 
 export module phanes_deque;
 
+// UINT64_MAX is used to indicate that a thread is not currently active in the epoch domain.
+inline constexpr std::uint64_t kInactiveEpoch = ~std::uint64_t{0};
+
 struct alignas(64) PaddedEpoch
 {
-    std::atomic<std::uint64_t> value{EpochDomain::kInactive};
+    std::atomic<std::uint64_t> value{kInactiveEpoch};
 };
 
 struct EpochDomain
 {
-    // UINT64_MAX is used to indicate that a thread is not currently active in the epoch domain.
-    static constexpr std::uint64_t kInactive = ~std::uint64_t{0};
+    static constexpr std::uint64_t kInactive = kInactiveEpoch;
 
     alignas(64) std::atomic<std::uint64_t> global_epoch{0};
 
@@ -31,7 +33,7 @@ struct EpochDomain
     {
         for (auto& epoch : local_epochs)
         {
-            epoch.store(kInactive, std::memory_order_relaxed);
+            epoch.value.store(kInactive, std::memory_order_relaxed);
         }
     }
 
@@ -181,7 +183,7 @@ class LockFreeDeque
         }
 
         // Pin the current epoch before we read the buffer, so that the buffer is not freed while we are reading it
-        EpochGuard guard(domain.local_epochs[id], domain.global_epoch.load(std::memory_order_seq_cst));
+        EpochGuard guard(domain.local_epochs[id].value, domain.global_epoch.load(std::memory_order_seq_cst));
         std::atomic_thread_fence(std::memory_order_seq_cst);
 
         auto* buf = buffer.load(std::memory_order_relaxed);
@@ -226,7 +228,7 @@ class LockFreeDeque
         const auto next_epoch = current_epoch + 1;
         for (const auto& slot : domain.local_epochs)
         {
-            const auto local_epoch = slot.load(std::memory_order_seq_cst);
+            const auto local_epoch = slot.value.load(std::memory_order_seq_cst);
             if (local_epoch != EpochDomain::kInactive && local_epoch != current_epoch)
             {
                 return; // found a hazard, cannot advance epoch
