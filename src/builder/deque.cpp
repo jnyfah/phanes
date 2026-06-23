@@ -55,6 +55,9 @@ struct EpochGuard
     }
 
     ~EpochGuard() { slot.store(EpochDomain::kInactive, std::memory_order_release); }
+
+    EpochGuard(const EpochGuard&) = delete;
+    auto operator=(const EpochGuard&) -> EpochGuard& = delete;
 };
 
 // Typename T here is a trival type of DirectorId (size_t) defined in core, so this deque would only work for trivial
