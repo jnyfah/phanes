@@ -19,7 +19,6 @@ export module phanes_uring;
 // todo
 // offsets for 3 simple read
 // how to do full read in batches
-// move constructor
 
 import core;
 
@@ -151,7 +150,7 @@ export class Uring
 
         // fill in data
         auto sqentry = &sqe[index];
-        std::memset(sqe, 0, sizeof(*sqe));
+        std::memset(sqentry, 0, sizeof(*sqentry));
         sqentry->fd = fd;
         sqentry->opcode = IORING_OP_READ;
         sqentry->len = len;
