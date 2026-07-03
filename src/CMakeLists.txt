@@ -14,6 +14,7 @@ target_sources(phanes_core
       parser/parser.ixx
       view/view.ixx
       view/executor.ixx
+      io/uring.cpp
   PRIVATE
       builder/builder.cpp
       analyzer/analyzer.cpp

@@ -33,6 +33,7 @@ module analyzer;
 
 import phanes_deque;
 import phanes_hasher;
+import phanes_uring;
 
 struct HashError
 {
