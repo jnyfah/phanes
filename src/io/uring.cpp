@@ -16,10 +16,6 @@ module;
 
 export module phanes_uring;
 
-// todo
-// offsets for 3 simple read
-// how to do full read in batches
-
 import core;
 
 static auto io_uring_setup(unsigned entries, io_uring_params* p) -> int
@@ -111,6 +107,7 @@ export class Uring
     {
         ::close(buffer[tag].fd);
         buffer[tag].fd = -1;
+        free_slots.push_back(tag);
     }
 
     void reset()
@@ -123,6 +120,8 @@ export class Uring
             }
         }
         buffer.clear();
+        free_slots.clear();
+        pending = 0;
     }
 
     auto submit(const char* file, size_t len, off_t offset) -> std::expected<size_t, ErrorKind>
@@ -140,15 +139,26 @@ export class Uring
             return std::unexpected(ErrorKind::FileError);
         }
 
-        size_t tag = buffer.size();
-        buffer.emplace_back();
+        size_t tag;
+
+        if (!free_slots.empty())
+        {
+            tag = free_slots.back();
+            free_slots.pop_back();
+        }
+        else
+        {
+            tag = buffer.size();
+            buffer.emplace_back();
+        }
+
         buffer[tag].buf.resize(len);
         buffer[tag].fd = fd;
 
         auto tail = *sring.tail;
         auto index = tail & *sring.mask;
 
-        // fill in data
+        // fill in data into the SQE
         auto sqentry = &sqe[index];
         std::memset(sqentry, 0, sizeof(*sqentry));
         sqentry->fd = fd;
@@ -158,10 +168,12 @@ export class Uring
         sqentry->user_data = tag;
         sqentry->off = offset;
 
+        // sq ring references sqe via index
         sring.array[index] = index;
 
         // release so the kernel can observe the write
         std::atomic_ref<__u32>(*sring.tail).store(tail + 1, std::memory_order_release);
+        pending++; // queued, but not yet submitted to the kernel
         return tag;
     }
 
@@ -169,13 +181,22 @@ export class Uring
     {
         auto head = *cring.head;
 
-        // user does not own tail, so read with acquire
-        auto tail = std::atomic_ref<__u32>(*cring.tail).load(std::memory_order_acquire);
-
-        while (head == tail)
+        for (;;)
         {
-            // if atleast one is complete, send the data!!!!!!!!!!!!!!
-            int ret = io_uring_enter(ring, buffer.size(), 1, IORING_ENTER_GETEVENTS);
+            // user does not own tail, so read with acquire
+            auto tail = std::atomic_ref<__u32>(*cring.tail).load(std::memory_order_acquire);
+
+            // all completions are ready and there is nothing left to submit in io_uring_enter
+            // so leave the loop
+            if (head != tail && pending == 0)
+            {
+                break;
+            }
+
+            // if the cqe is not empty, sumbit all queued sqe bu dont wait for results since there are pending results
+            // in the cqe already
+            unsigned min_complete = (head == tail) ? 1u : 0u;
+            int ret = io_uring_enter(ring, pending, min_complete, IORING_ENTER_GETEVENTS);
             if (ret < 0)
             {
                 // failure
@@ -183,9 +204,9 @@ export class Uring
                 {
                     continue;
                 }
-                return std::unexpected(ErrorKind::IOError); 
+                return std::unexpected(ErrorKind::IOError);
             }
-            tail = std::atomic_ref<__u32>(*cring.tail).load(std::memory_order_acquire);
+            pending = 0;
         }
 
         auto* cqe = &reinterpret_cast<io_uring_cqe*>(cring.cqes)[head & *cring.mask];
@@ -206,10 +227,11 @@ export class Uring
             return std::unexpected(ErrorKind::IOError);
         }
 
-        // size of ring = size of elements before array + (size of array * array type)
+        // size of ring = size of elements before array + (no of array elements* size of array type)
         sring_size = param.sq_off.array + (param.sq_entries * sizeof(unsigned));
         cring_size = param.cq_off.cqes + (param.cq_entries * sizeof(io_uring_cqe));
 
+        // can both rings fit in one MMAP?
         if (param.features & IORING_FEAT_SINGLE_MMAP)
         {
             sring_size = std::max(sring_size, cring_size);
@@ -250,8 +272,9 @@ export class Uring
         }
 
         // fill user data
-        // address of shared memory + offset
         auto sq_char = static_cast<std::byte*>(sq_ptr);
+
+        // address of shared memory + offset
         sring.head = reinterpret_cast<__u32*>(sq_char + param.sq_off.head);
         sring.tail = reinterpret_cast<__u32*>(sq_char + param.sq_off.tail);
         sring.entries = reinterpret_cast<__u32*>(sq_char + param.sq_off.ring_entries);
@@ -284,4 +307,7 @@ export class Uring
 
     void* sq_ptr{nullptr};
     void* cq_ptr{nullptr};
+
+    std::vector<size_t> free_slots; // indices ready to reuse
+    unsigned pending = 0; // SQEs queued but not yet handed to the kernel
 };
