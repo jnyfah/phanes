@@ -69,6 +69,7 @@ struct Acc
     std::array<int, 3> res{};
     std::array<bool, 3> has{};
     int arrived = 0;
+    int submitted = 0;
 };
 
 struct Active
@@ -87,10 +88,10 @@ auto prefilter_group(Uring& ring, const DuplicateGroup& group, PhanesHashState& 
 
 #ifdef __unix__
 
-    size_t count = 0;
-    const auto& file_size = group.size;
+    constexpr int WINDOW = 512;
+    const auto file_size = group.size;
 
-    size_t expected = 1; // front always
+    unsigned expected = 1; // front always
     if (group.size > 2 * SAMPLE)
         expected++; // back
     if (group.size > 3 * SAMPLE)
@@ -99,42 +100,47 @@ auto prefilter_group(Uring& ring, const DuplicateGroup& group, PhanesHashState& 
     std::vector<Meta> meta;
     std::vector<Acc> acc(group.files.size());
 
-    for (size_t i = 0; i < group.files.size(); i++)
+    size_t next_file = 0;
+    int in_flight = 0; // reads submitted but not yet released (in flight + held for reassembly)
+
+    // queue every applicable region of one file
+    auto submit_file = [&](size_t fi)
     {
-        const auto path = tree.files[group.files[i]].path.c_str();
-
-        // front
-        if (auto tag = ring.submit(path, SAMPLE, 0); tag)
+        const char* path = tree.files[group.files[fi]].path.c_str();
+        int n = 0;
+        auto add = [&](off_t off, int r)
         {
-            meta.resize(*tag + 1);
-            meta[*tag] = {i, 0};
-            count++;
-        }
-
-        // middle
+            if (auto tag = ring.submit(path, SAMPLE, off); tag)
+            {
+                if (*tag >= meta.size())
+                {
+                    meta.resize(*tag + 1);
+                }
+                meta[*tag] = {fi, r};
+                n++;
+            }
+        };
+        add(0, 0); // front
         if (group.size > 3 * SAMPLE)
-        {
-            if (auto tag = ring.submit(path, SAMPLE, static_cast<off_t>(file_size / 2 - SAMPLE / 2)); tag)
-            {
-                meta.resize(*tag + 1);
-                meta[*tag] = {i, 1};
-                count++;
-            }
-        }
-
-        // back
+            add(static_cast<off_t>(file_size / 2 - SAMPLE / 2), 1); // middle
         if (group.size > 2 * SAMPLE)
-        {
-            if (auto tag = ring.submit(path, SAMPLE, static_cast<off_t>(file_size) - static_cast<off_t>(SAMPLE)); tag)
-            {
-                meta.resize(*tag + 1);
-                meta[*tag] = {i, 2};
-                count++;
-            }
-        }
-    }
+            add(static_cast<off_t>(file_size) - static_cast<off_t>(SAMPLE), 2); // back
+        acc[fi].submitted = n;
+        in_flight += n;
+    };
 
-    while (count > 0)
+    // submit all regions
+    auto pump = [&]
+    {
+        while (next_file < group.files.size() && in_flight + static_cast<int>(expected) <= WINDOW)
+        {
+            submit_file(next_file++);
+        }
+    };
+
+    pump();
+
+    while (in_flight > 0)
     {
         auto res = ring.next();
         if (!res)
@@ -143,39 +149,40 @@ auto prefilter_group(Uring& ring, const DuplicateGroup& group, PhanesHashState& 
         }
 
         auto [fid, region] = meta[res->tag];
-        acc[fid].tag[region] = res->tag;
-        acc[fid].has[region] = true;
-        acc[fid].res[region] = res->res;
-        acc[fid].arrived++;
-        count--;
+        auto& a = acc[fid];
+        a.tag[region] = res->tag;
+        a.res[region] = res->res;
+        a.has[region] = true;
+        a.arrived++;
 
-        auto& index = acc[fid];
-
-        if (index.arrived == expected)
+        // a file settles once all of its submitted reads are back
+        if (a.arrived == a.submitted)
         {
-            phanes_hash_reset(state);
-
-            for (size_t i = 0; i < index.has.size(); ++i)
+            if (a.submitted == static_cast<int>(expected)) // fully sampled -> hash in region order
             {
-                if (index.has[i] && index.res[i] > 0)
+                phanes_hash_reset(state);
+                for (size_t r = 0; r < a.has.size(); ++r)
                 {
-                    phanes_hash_update(state,
-                                       reinterpret_cast<const std::uint8_t*>(ring.data(index.tag[i]).data()),
-                                       static_cast<size_t>(index.res[i]));
+                    if (a.has[r] && a.res[r] > 0)
+                    {
+                        phanes_hash_update(state,
+                                           reinterpret_cast<const std::uint8_t*>(ring.data(a.tag[r]).data()),
+                                           static_cast<size_t>(a.res[r]));
+                    }
                 }
+                result[phanes_hash_digest(state)].push_back(group.files[fid]);
             }
 
-            Hash h = phanes_hash_digest(state);
-            result[h].push_back(group.files[fid]);
-
-            // release the files
-            for (int i = 0; i < index.has.size(); i++)
+            // release this file's slots and pull in more work
+            for (size_t r = 0; r < a.has.size(); ++r)
             {
-                if (index.has[i])
+                if (a.has[r])
                 {
-                    ring.release(index.tag[i]);
+                    ring.release(a.tag[r]);
+                    in_flight--;
                 }
             }
+            pump();
         }
     }
 
@@ -305,6 +312,7 @@ auto hash_file(Uring& ring, const HashMap& by_sample, PhanesHashState& state, co
         }
     }
 
+    ring.reset();
     return result;
 #endif
 }
@@ -350,11 +358,7 @@ std::generator<DuplicateGroup> compute_duplicate_groups(const DirectoryTree& tre
 
     auto tasks_owner = std::make_unique<LockFreeDeque<std::size_t>>(1024, n_threads);
     auto& tasks = *tasks_owner;
-    // get the largest group
-    auto it = std::max_element(size_groups.begin(),
-                               size_groups.end(),
-                               [](const DuplicateGroup& a, const DuplicateGroup& b)
-                               { return (a.files.size() < b.files.size()); });
+    constexpr unsigned ring_entries = 1024;
 
     for (std::size_t i = 0; i < total; ++i)
     {
@@ -369,10 +373,10 @@ std::generator<DuplicateGroup> compute_duplicate_groups(const DirectoryTree& tre
     auto worker = [&](std::size_t id)
     {
         Uring uring;
-        uring.init(it->files.size() * 3); // sample hash submits up to 3 regions per file
+        const bool ok = uring.init(ring_entries).has_value();
         PhanesHashState state;
 
-        while (!tasks.empty())
+        while (ok && !tasks.empty())
         {
             auto idx = tasks.steal_front(id);
             if (!idx)
