@@ -112,7 +112,7 @@ export class Uring
 
     void reset()
     {
-        for (auto& d : buffer)
+        for (const auto& d : buffer)
         {
             if (d.fd >= 0)
             {

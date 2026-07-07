@@ -34,7 +34,10 @@ module analyzer;
 
 import phanes_deque;
 import phanes_hasher;
+
+#ifdef __unix__
 import phanes_uring;
+#endif
 
 using Hash = std::uint64_t;
 using HashMap = std::unordered_map<Hash, std::vector<FileId>>;
@@ -80,8 +83,10 @@ struct Active
     PhanesHashState state;
 };
 
-auto prefilter_group(Uring& ring, const DuplicateGroup& group, PhanesHashState& state, const DirectoryTree& tree)
-    -> HashMap
+auto prefilter_group(Uring& ring,
+                     const DuplicateGroup& group,
+                     PhanesHashState& state,
+                     const DirectoryTree& tree) -> HashMap
 {
     constexpr std::uintmax_t SAMPLE = 4096;
     HashMap result;
@@ -187,17 +192,16 @@ auto prefilter_group(Uring& ring, const DuplicateGroup& group, PhanesHashState& 
     }
 
     ring.reset();
-    return result;
-
 #endif
+    return result;
 }
 
 auto hash_file(Uring& ring, const HashMap& by_sample, PhanesHashState& state, const DirectoryTree& tree) -> HashMap
 {
 
-#ifdef __unix__
-
     HashMap result;
+
+#ifdef __unix__
 
     // chunk size per read, and how many chunks in flight per worker
     // peak full-hash memory ≈ n_threads * WINDOW * CHUNK
@@ -313,8 +317,8 @@ auto hash_file(Uring& ring, const HashMap& by_sample, PhanesHashState& state, co
     }
 
     ring.reset();
-    return result;
 #endif
+    return result;
 }
 
 std::generator<DuplicateGroup> group_files_by_size(const DirectoryTree& tree)
