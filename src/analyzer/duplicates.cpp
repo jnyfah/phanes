@@ -81,8 +81,10 @@ struct Active
     PhanesHashState state;
 };
 
-auto prefilter_group(Ring& ring, const DuplicateGroup& group, PhanesHashState& state, const DirectoryTree& tree)
-    -> HashMap
+auto prefilter_group(Ring& ring,
+                     const DuplicateGroup& group,
+                     PhanesHashState& state,
+                     const DirectoryTree& tree) -> HashMap
 {
     constexpr std::uintmax_t SAMPLE = 4096;
     HashMap result;
