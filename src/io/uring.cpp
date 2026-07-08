@@ -275,17 +275,17 @@ export class Ring
 
         // fill user data
         // address of shared memory + offset
-        sring.head = reinterpret_cast<__u32*>(sq_char + param.sq_off.head);
-        sring.tail = reinterpret_cast<__u32*>(sq_char + param.sq_off.tail);
-        sring.entries = reinterpret_cast<__u32*>(sq_char + param.sq_off.ring_entries);
-        sring.flags = reinterpret_cast<__u32*>(sq_char + param.sq_off.flags);
-        sring.mask = reinterpret_cast<__u32*>(sq_char + param.sq_off.ring_mask);
-        sring.array = reinterpret_cast<__u32*>(sq_char + param.sq_off.array);
+        sring.head = reinterpret_cast<__u32*>(sq_ptr + param.sq_off.head);
+        sring.tail = reinterpret_cast<__u32*>(sq_ptr + param.sq_off.tail);
+        sring.entries = reinterpret_cast<__u32*>(sq_ptr + param.sq_off.ring_entries);
+        sring.flags = reinterpret_cast<__u32*>(sq_ptr + param.sq_off.flags);
+        sring.mask = reinterpret_cast<__u32*>(sq_ptr + param.sq_off.ring_mask);
+        sring.array = reinterpret_cast<__u32*>(sq_ptr + param.sq_off.array);
 
-        cring.head = reinterpret_cast<__u32*>(cq_char + param.cq_off.head);
-        cring.tail = reinterpret_cast<__u32*>(cq_char + param.cq_off.tail);
-        cring.mask = reinterpret_cast<__u32*>(cq_char + param.cq_off.ring_mask);
-        cring.cqes = reinterpret_cast<io_uring_cqe*>(cq_char + param.cq_off.cqes);
+        cring.head = reinterpret_cast<__u32*>(cq_ptr + param.cq_off.head);
+        cring.tail = reinterpret_cast<__u32*>(cq_ptr + param.cq_off.tail);
+        cring.mask = reinterpret_cast<__u32*>(cq_ptr + param.cq_off.ring_mask);
+        cring.cqes = reinterpret_cast<io_uring_cqe*>(cq_ptr + param.cq_off.cqes);
 
         return {};
     }

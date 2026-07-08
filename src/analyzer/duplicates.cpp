@@ -81,10 +81,8 @@ struct Active
     PhanesHashState state;
 };
 
-auto prefilter_group(Ring& ring,
-                     const DuplicateGroup& group,
-                     PhanesHashState& state,
-                     const DirectoryTree& tree) -> HashMap
+auto prefilter_group(Ring& ring, const DuplicateGroup& group, PhanesHashState& state, const DirectoryTree& tree)
+    -> HashMap
 {
     constexpr std::uintmax_t SAMPLE = 4096;
     HashMap result;
@@ -166,9 +164,7 @@ auto prefilter_group(Ring& ring,
                 {
                     if (a.has[r] && a.res[r] > 0)
                     {
-                        phanes_hash_update(state,
-                                           reinterpret_cast<const std::byte*>(ring.data(a.tag[r]).data()),
-                                           static_cast<size_t>(a.res[r]));
+                        phanes_hash_update(state, ring.data(a.tag[r]).data(), static_cast<size_t>(a.res[r]));
                     }
                 }
                 result[phanes_hash_digest(state)].push_back(group.files[fid]);
@@ -260,9 +256,7 @@ auto hash_file(Ring& ring, const HashMap& by_sample, PhanesHashState& state, con
             continue;
         }
 
-        phanes_hash_update(active[index].state,
-                           reinterpret_cast<const std::byte*>(ring.data(r->tag).data()),
-                           static_cast<size_t>(r->res));
+        phanes_hash_update(active[index].state, ring.data(r->tag).data(), static_cast<size_t>(r->res));
         active[index].offset += r->res;
         ring.release(r->tag);
 

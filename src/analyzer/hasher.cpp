@@ -15,7 +15,7 @@ static constexpr uint64_t seed = 0;
 export struct PhanesHashState
 {
     __m256i acc[4];
-    uint8_t buffer[32];
+    std::byte buffer[32];
     size_t buf_used;
     size_t total_len;
     size_t blocks;
@@ -80,7 +80,7 @@ static auto mix(__m256i acc, __m256i word, __m256i p1_lo, __m256i p1_hi, __m256i
     return acc;
 }
 
-export void phanes_hash_update(PhanesHashState& state, const uint8_t* data, size_t len)
+export void phanes_hash_update(PhanesHashState& state, const std::byte* data, size_t len)
 {
     state.total_len += len;
 
