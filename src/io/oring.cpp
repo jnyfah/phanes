@@ -2,13 +2,16 @@ module;
 
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
+// clang-format off
+#include <ioringapi.h>
+#include <windows.h>
+// clang-format on
+
 #include <cstddef>
 #include <cstdint>
 #include <expected>
 #include <filesystem>
-#include <ioringapi.h>
 #include <vector>
-#include <windows.h>
 
 export module phanes_io;
 

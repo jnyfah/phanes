@@ -217,7 +217,7 @@ export auto phanes_hash_digest(const PhanesHashState& state) -> uint64_t
 
     for (size_t i = 0; i < state.buf_used; i++)
     {
-        h64 ^= (uint64_t)state.buffer[i] * PRIME_3;
+        h64 ^= std::to_integer<uint64_t>(state.buffer[i]) * PRIME_3;
         h64 = rotate_left(h64, 11) * PRIME_1;
     }
 
