@@ -3,8 +3,8 @@ module;
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 // clang-format off
-#include <ioringapi.h>
 #include <windows.h>
+#include <ioringapi.h>
 // clang-format on
 
 #include <cstddef>
