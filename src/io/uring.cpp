@@ -133,6 +133,7 @@ export class Uring
             return std::unexpected(ErrorKind::IOError);
         }
 
+        // open the file 
         int fd = ::open(file, O_RDONLY);
         if (fd < 0)
         {
