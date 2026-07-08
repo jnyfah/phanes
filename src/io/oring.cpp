@@ -4,25 +4,18 @@ module;
 #define NOMINMAX
 #include <windows.h>
 
-#include <ioringapi.h> // CreateIoRing / BuildIoRingReadFile / SubmitIoRing / PopIoRingCompletion
+#include <ioringapi.h>
 
 #include <cstddef>
 #include <cstdint>
 #include <expected>
+#include <filesystem>
 #include <vector>
 
-export module phanes_ioring;
+export module phanes_io;
 
 import core;
 
-// Windows IoRing backend, mirroring the Linux Uring class (init / submit / next / data / release / reset).
-//
-// Unlike io_uring, the Win32 IoRing API owns the submission/completion ring memory, so there is no
-// mmap or manual head/tail: BuildIoRingReadFile queues a read, SubmitIoRing hands the queue to the
-// kernel (and can wait), PopIoRingCompletion drains one completion.
-//
-// NOTE: Windows-only. Needs a recent Windows SDK (ioringapi.h) and Win11 22H2+ at runtime for
-// IORING_VERSION_3. Not compiled on Linux — CMake selects uring.cpp there and this on WIN32.
 
 export struct Data
 {
@@ -33,21 +26,21 @@ export struct Data
 export struct Result
 {
     size_t tag;
-    int res; // bytes read, or < 0 on failure  (mirrors Uring's res)
+    int res; 
 };
 
-export class IoRing
+export class Ring
 {
   public:
-    IoRing() = default;
+    Ring() = default;
 
-    IoRing(const IoRing&) = delete;
-    IoRing& operator=(const IoRing&) = delete;
+    Ring(const Ring&) = delete;
+    Ring& operator=(const Ring&) = delete;
 
-    IoRing(IoRing&&) noexcept = default;
-    IoRing& operator=(IoRing&&) noexcept = default;
+    Ring(Ring&&) noexcept = default;
+    Ring& operator=(Ring&&) noexcept = default;
 
-    ~IoRing()
+    ~Ring()
     {
         for (const auto& d : buffer)
         {
@@ -74,6 +67,7 @@ export class IoRing
         {
             return std::unexpected(ErrorKind::IOError);
         }
+        sq_entries = entries;
         return {};
     }
 
@@ -103,10 +97,17 @@ export class IoRing
         pending = 0;
     }
 
-    auto submit(const char* file, size_t len, long long offset) -> std::expected<size_t, ErrorKind>
+    auto submit(const std::filesystem::path& file, size_t len, int64_t offset) -> std::expected<size_t, ErrorKind>
     {
-        HANDLE fd = ::CreateFileA(
-            file, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        // SQ-full guard: cannot queue more than the submission queue holds before a submit drains it
+        if (pending >= sq_entries)
+        {
+            return std::unexpected(ErrorKind::IOError);
+        }
+
+        // path is native wide (wchar_t) on Windows, so CreateFileW takes file.c_str() directly
+        HANDLE fd = ::CreateFileW(
+            file.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
         if (fd == INVALID_HANDLE_VALUE)
         {
             return std::unexpected(ErrorKind::FileError);
@@ -127,10 +128,10 @@ export class IoRing
         buffer[tag].buf.resize(len);
         buffer[tag].fd = fd;
 
-        // the API owns the SQE; we just describe the read. user_data (tag) comes back on the completion.
         IORING_HANDLE_REF fileRef = IoRingHandleRefFromHandle(fd);
         IORING_BUFFER_REF bufRef = IoRingBufferRefFromPointer(buffer[tag].buf.data());
 
+        // queue in submission queue
         HRESULT hr = ::BuildIoRingReadFile(handle,
                                            fileRef,
                                            bufRef,
@@ -146,7 +147,7 @@ export class IoRing
             return std::unexpected(ErrorKind::IOError);
         }
 
-        pending++; // queued, but not yet submitted to the kernel
+        pending++;
         return tag;
     }
 
@@ -186,4 +187,5 @@ export class IoRing
     std::vector<Data> buffer;
     std::vector<size_t> free_slots;
     unsigned pending = 0;
+    unsigned sq_entries = 0; // submission queue capacity, from init
 };

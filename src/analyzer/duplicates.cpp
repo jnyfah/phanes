@@ -35,9 +35,7 @@ module analyzer;
 import phanes_deque;
 import phanes_hasher;
 
-#ifdef __unix__
-import phanes_uring;
-#endif
+import phanes_io;
 
 using Hash = std::uint64_t;
 using HashMap = std::unordered_map<Hash, std::vector<FileId>>;
@@ -83,15 +81,13 @@ struct Active
     PhanesHashState state;
 };
 
-auto prefilter_group(Uring& ring,
+auto prefilter_group(Ring& ring,
                      const DuplicateGroup& group,
                      PhanesHashState& state,
                      const DirectoryTree& tree) -> HashMap
 {
     constexpr std::uintmax_t SAMPLE = 4096;
     HashMap result;
-
-#ifdef __unix__
 
     constexpr int WINDOW = 512;
     const auto file_size = group.size;
@@ -111,9 +107,9 @@ auto prefilter_group(Uring& ring,
     // queue every applicable region of one file
     auto submit_file = [&](size_t fi)
     {
-        const char* path = tree.files[group.files[fi]].path.c_str();
+        const auto& path = tree.files[group.files[fi]].path;
         int n = 0;
-        auto add = [&](off_t off, int r)
+        auto add = [&](int64_t off, int r)
         {
             if (auto tag = ring.submit(path, SAMPLE, off); tag)
             {
@@ -127,9 +123,9 @@ auto prefilter_group(Uring& ring,
         };
         add(0, 0); // front
         if (group.size > 3 * SAMPLE)
-            add(static_cast<off_t>(file_size / 2 - SAMPLE / 2), 1); // middle
+            add(static_cast<int64_t>(file_size / 2 - SAMPLE / 2), 1); // middle
         if (group.size > 2 * SAMPLE)
-            add(static_cast<off_t>(file_size) - static_cast<off_t>(SAMPLE), 2); // back
+            add(static_cast<int64_t>(file_size) - static_cast<int64_t>(SAMPLE), 2); // back
         acc[fi].submitted = n;
         in_flight += n;
     };
@@ -192,16 +188,13 @@ auto prefilter_group(Uring& ring,
     }
 
     ring.reset();
-#endif
     return result;
 }
 
-auto hash_file(Uring& ring, const HashMap& by_sample, PhanesHashState& state, const DirectoryTree& tree) -> HashMap
+auto hash_file(Ring& ring, const HashMap& by_sample, PhanesHashState& state, const DirectoryTree& tree) -> HashMap
 {
 
     HashMap result;
-
-#ifdef __unix__
 
     // chunk size per read, and how many chunks in flight per worker
     // peak full-hash memory ≈ n_threads * WINDOW * CHUNK
@@ -236,7 +229,7 @@ auto hash_file(Uring& ring, const HashMap& by_sample, PhanesHashState& state, co
         active.push_back({id, tree.files[id].size, 0, {}});
         phanes_hash_reset(active[index].state);
 
-        const char* path = tree.files[id].path.c_str();
+        const auto& path = tree.files[id].path;
         if (auto t = ring.submit(path, CHUNK, 0); t)
         {
             if (*t >= tag_to_active.size())
@@ -276,7 +269,7 @@ auto hash_file(Uring& ring, const HashMap& by_sample, PhanesHashState& state, co
         if (active[index].offset < active[index].size)
         {
             // submit next chunk
-            const char* path = tree.files[active[index].id].path.c_str();
+            const auto& path = tree.files[active[index].id].path;
             if (auto t = ring.submit(path, CHUNK, active[index].offset); t)
             {
                 if (*t >= tag_to_active.size())
@@ -302,7 +295,7 @@ auto hash_file(Uring& ring, const HashMap& by_sample, PhanesHashState& state, co
                 active[index].offset = 0;
                 phanes_hash_reset(active[index].state);
 
-                const char* path = tree.files[id].path.c_str();
+                const auto& path = tree.files[id].path;
                 if (auto t = ring.submit(path, CHUNK, 0); t)
                 {
                     if (*t >= tag_to_active.size())
@@ -317,7 +310,6 @@ auto hash_file(Uring& ring, const HashMap& by_sample, PhanesHashState& state, co
     }
 
     ring.reset();
-#endif
     return result;
 }
 
@@ -376,7 +368,7 @@ std::generator<DuplicateGroup> compute_duplicate_groups(const DirectoryTree& tre
 
     auto worker = [&](std::size_t id)
     {
-        Uring uring;
+        Ring uring;
         const bool ok = uring.init(ring_entries).has_value();
         PhanesHashState state;
 

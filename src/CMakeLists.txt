@@ -1,20 +1,26 @@
 # Core module target
 add_library(phanes_core STATIC)
 
+if(WIN32)
+  set(PHANES_IO_BACKEND io/oring.cpp)
+else()
+  set(PHANES_IO_BACKEND io/uring.cpp)
+endif()
+
 target_sources(phanes_core
   PUBLIC
     FILE_SET CXX_MODULES
     FILES
       core/core.ixx
       builder/builder.ixx
-      builder/scheduler.cpp 
-      builder/deque.cpp 
+      builder/scheduler.cpp
+      builder/deque.cpp
       analyzer/analyzer.ixx
       analyzer/hasher.cpp
       parser/parser.ixx
       view/view.ixx
       view/executor.ixx
-      io/uring.cpp
+      ${PHANES_IO_BACKEND}
   PRIVATE
       builder/builder.cpp
       analyzer/analyzer.cpp

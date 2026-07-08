@@ -8,13 +8,14 @@ module;
 #include <cstring>
 #include <expected>
 #include <fcntl.h>
+#include <filesystem>
 #include <linux/io_uring.h>
 #include <sys/mman.h>
 #include <sys/syscall.h>
 #include <unistd.h>
 #include <vector>
 
-export module phanes_uring;
+export module phanes_io;
 
 import core;
 
@@ -59,18 +60,18 @@ export struct Result
     int res;
 };
 
-export class Uring
+export class Ring
 {
   public:
-    Uring() = default;
+    Ring() = default;
 
-    Uring(const Uring&) = delete;
-    Uring& operator=(const Uring&) = delete;
+    Ring(const Ring&) = delete;
+    Ring& operator=(const Ring&) = delete;
 
-    Uring(Uring&&) noexcept = default;
-    Uring& operator=(Uring&&) noexcept = default;
+    Ring(Ring&&) noexcept = default;
+    Ring& operator=(Ring&&) noexcept = default;
 
-    ~Uring()
+    ~Ring()
     {
         if (ring >= 0)
         {
@@ -124,7 +125,7 @@ export class Uring
         pending = 0;
     }
 
-    auto submit(const char* file, size_t len, off_t offset) -> std::expected<size_t, ErrorKind>
+    auto submit(const std::filesystem::path& file, size_t len, int64_t offset) -> std::expected<size_t, ErrorKind>
     {
         // SQ-full guard
         auto sq_head = std::atomic_ref<__u32>(*sring.head).load(std::memory_order_acquire);
@@ -133,8 +134,8 @@ export class Uring
             return std::unexpected(ErrorKind::IOError);
         }
 
-        // open the file 
-        int fd = ::open(file, O_RDONLY);
+        // open the file
+        int fd = ::open(file.c_str(), O_RDONLY);
         if (fd < 0)
         {
             return std::unexpected(ErrorKind::FileError);
