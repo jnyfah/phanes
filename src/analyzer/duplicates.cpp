@@ -167,7 +167,7 @@ auto prefilter_group(Ring& ring,
                     if (a.has[r] && a.res[r] > 0)
                     {
                         phanes_hash_update(state,
-                                           reinterpret_cast<const std::uint8_t*>(ring.data(a.tag[r]).data()),
+                                           reinterpret_cast<const std::byte*>(ring.data(a.tag[r]).data()),
                                            static_cast<size_t>(a.res[r]));
                     }
                 }
@@ -198,7 +198,7 @@ auto hash_file(Ring& ring, const HashMap& by_sample, PhanesHashState& state, con
 
     // chunk size per read, and how many chunks in flight per worker
     // peak full-hash memory ≈ n_threads * WINDOW * CHUNK
-    constexpr std::uint64_t CHUNK = 4ull * 1024 * 1024;
+    constexpr std::uint64_t CHUNK = 4ULL * 1024 * 1024;
     constexpr int WINDOW = 16;
 
     int in_flight = 0;
@@ -261,7 +261,7 @@ auto hash_file(Ring& ring, const HashMap& by_sample, PhanesHashState& state, con
         }
 
         phanes_hash_update(active[index].state,
-                           reinterpret_cast<const std::uint8_t*>(ring.data(r->tag).data()),
+                           reinterpret_cast<const std::byte*>(ring.data(r->tag).data()),
                            static_cast<size_t>(r->res));
         active[index].offset += r->res;
         ring.release(r->tag);

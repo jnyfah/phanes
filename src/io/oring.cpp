@@ -2,20 +2,17 @@ module;
 
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
-#include <windows.h>
-
-#include <ioringapi.h>
-
 #include <cstddef>
 #include <cstdint>
 #include <expected>
 #include <filesystem>
+#include <ioringapi.h>
 #include <vector>
+#include <windows.h>
 
 export module phanes_io;
 
 import core;
-
 
 export struct Data
 {
@@ -26,7 +23,7 @@ export struct Data
 export struct Result
 {
     size_t tag;
-    int res; 
+    int res;
 };
 
 export class Ring
@@ -106,8 +103,13 @@ export class Ring
         }
 
         // path is native wide (wchar_t) on Windows, so CreateFileW takes file.c_str() directly
-        HANDLE fd = ::CreateFileW(
-            file.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        HANDLE fd = ::CreateFileW(file.c_str(),
+                                  GENERIC_READ,
+                                  FILE_SHARE_READ,
+                                  nullptr,
+                                  OPEN_EXISTING,
+                                  FILE_ATTRIBUTE_NORMAL,
+                                  nullptr);
         if (fd == INVALID_HANDLE_VALUE)
         {
             return std::unexpected(ErrorKind::FileError);
@@ -128,8 +130,8 @@ export class Ring
         buffer[tag].buf.resize(len);
         buffer[tag].fd = fd;
 
-        IORING_HANDLE_REF fileRef = IoRingHandleRefFromHandle(fd);
-        IORING_BUFFER_REF bufRef = IoRingBufferRefFromPointer(buffer[tag].buf.data());
+        auto fileRef = IoRingHandleRefFromHandle(fd);
+        auto bufRef = IoRingBufferRefFromPointer(buffer[tag].buf.data());
 
         // queue in submission queue
         HRESULT hr = ::BuildIoRingReadFile(handle,

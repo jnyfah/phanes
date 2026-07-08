@@ -241,8 +241,8 @@ export class Ring
         }
 
         // set MMAP
-        sq_ptr =
-            ::mmap(nullptr, sring_size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_POPULATE, ring, IORING_OFF_SQ_RING);
+        sq_ptr = static_cast<std::byte*>(
+            ::mmap(nullptr, sring_size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_POPULATE, ring, IORING_OFF_SQ_RING));
         if (sq_ptr == MAP_FAILED)
         {
             return std::unexpected(ErrorKind::IOError);
@@ -254,12 +254,12 @@ export class Ring
         }
         else
         {
-            cq_ptr = ::mmap(nullptr,
-                            cring_size,
-                            PROT_READ | PROT_WRITE,
-                            MAP_SHARED | MAP_POPULATE,
-                            ring,
-                            IORING_OFF_CQ_RING);
+            cq_ptr = static_cast<std::byte*>(::mmap(nullptr,
+                                                    cring_size,
+                                                    PROT_READ | PROT_WRITE,
+                                                    MAP_SHARED | MAP_POPULATE,
+                                                    ring,
+                                                    IORING_OFF_CQ_RING));
             if (cq_ptr == MAP_FAILED)
                 return std::unexpected(ErrorKind::IOError);
         }
@@ -274,8 +274,6 @@ export class Ring
         }
 
         // fill user data
-        auto sq_char = static_cast<std::byte*>(sq_ptr);
-
         // address of shared memory + offset
         sring.head = reinterpret_cast<__u32*>(sq_char + param.sq_off.head);
         sring.tail = reinterpret_cast<__u32*>(sq_char + param.sq_off.tail);
@@ -284,7 +282,6 @@ export class Ring
         sring.mask = reinterpret_cast<__u32*>(sq_char + param.sq_off.ring_mask);
         sring.array = reinterpret_cast<__u32*>(sq_char + param.sq_off.array);
 
-        auto cq_char = static_cast<std::byte*>(cq_ptr);
         cring.head = reinterpret_cast<__u32*>(cq_char + param.cq_off.head);
         cring.tail = reinterpret_cast<__u32*>(cq_char + param.cq_off.tail);
         cring.mask = reinterpret_cast<__u32*>(cq_char + param.cq_off.ring_mask);
@@ -307,8 +304,8 @@ export class Ring
     int ring = -1;
     std::vector<Data> buffer;
 
-    void* sq_ptr{nullptr};
-    void* cq_ptr{nullptr};
+    std::byte* sq_ptr{nullptr};
+    std::byte* cq_ptr{nullptr};
 
     std::vector<size_t> free_slots; // indices ready to reuse
     unsigned pending = 0; // SQEs queued but not yet handed to the kernel
