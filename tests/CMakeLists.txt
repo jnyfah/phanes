@@ -10,10 +10,10 @@ FetchContent_Declare(
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
-file(GLOB PHANES_TEST_SOURCES "*.cpp")
+file(GLOB PHANES_TEST_SOURCES CONFIGURE_DEPENDS "*.cpp")
 
-if(UNIX)
-    list(APPEND PHANES_TEST_SOURCES io_test.cpp)
+if(WIN32)
+    list(REMOVE_ITEM PHANES_TEST_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/io_test.cpp")
 endif()
 
 add_executable(phanes_test
