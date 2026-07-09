@@ -7,7 +7,6 @@
 
 import phanes_io;
 
-
 namespace fs = std::filesystem;
 
 namespace
@@ -16,7 +15,7 @@ namespace
 struct Corpus
 {
     fs::path dir;
-    fs::path big;                // one large file, read in chunks
+    fs::path big; // one large file, read in chunks
     std::vector<fs::path> small; // many small files, read with a window
 
     Corpus()

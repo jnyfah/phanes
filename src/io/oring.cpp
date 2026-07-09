@@ -105,7 +105,7 @@ export class Ring
             return std::unexpected(ErrorKind::IOError);
         }
 
-        // open the file for reading 
+        // open the file for reading
         HANDLE fd = ::CreateFileW(file.c_str(),
                                   GENERIC_READ,
                                   FILE_SHARE_READ,
