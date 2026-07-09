@@ -12,7 +12,6 @@
 
 import phanes_io;
 
-
 namespace fs = std::filesystem;
 
 namespace
@@ -72,7 +71,7 @@ std::string_view first(const std::vector<std::byte>& buf, int res)
     Ring ring;                                                                                                         \
     if (!ring.init(64).has_value())                                                                                    \
     {                                                                                                                  \
-        GTEST_SKIP() << "async I/O ring unavailable in this environment";                                             \
+        GTEST_SKIP() << "async I/O ring unavailable in this environment";                                              \
     }                                                                                                                  \
     static_assert(true)
 

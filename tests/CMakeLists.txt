@@ -12,7 +12,7 @@ FetchContent_MakeAvailable(googletest)
 
 file(GLOB PHANES_TEST_SOURCES "*.cpp")
 
-if(WIN32)
+if(UNIX)
     list(APPEND PHANES_TEST_SOURCES io_test.cpp)
 endif()
 
