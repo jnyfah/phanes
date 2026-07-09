@@ -16,6 +16,7 @@ add_executable(phanes_test
     builder_test.cpp
     view_test.cpp
     hasher_test.cpp
+    io_test.cpp
 )
 target_link_libraries(phanes_test PRIVATE phanes_core GTest::gtest_main)
 

@@ -61,7 +61,7 @@ export class Ring
         flags.Required = IORING_CREATE_REQUIRED_FLAGS_NONE;
         flags.Advisory = IORING_CREATE_ADVISORY_FLAGS_NONE;
 
-        // submission + completion queue both sized to `entries`
+        // submission + completion queue both sized to entries
         HRESULT hr = ::CreateIoRing(IORING_VERSION_3, flags, entries, entries, &handle);
         if (FAILED(hr))
         {
@@ -105,7 +105,7 @@ export class Ring
             return std::unexpected(ErrorKind::IOError);
         }
 
-        // path is native wide (wchar_t) on Windows, so CreateFileW takes file.c_str() directly
+        // open the file for reading 
         HANDLE fd = ::CreateFileW(file.c_str(),
                                   GENERIC_READ,
                                   FILE_SHARE_READ,
@@ -164,7 +164,7 @@ export class Ring
             HRESULT hr = ::PopIoRingCompletion(handle, &cqe);
             if (hr == S_OK) // a completion was available
             {
-                // flush any still-queued reads (submit, do not wait) so they get processed
+                // flush any still-queued reads with WaitOperations =0, so we are not waiting!
                 if (pending > 0)
                 {
                     UINT32 submitted = 0;
@@ -176,7 +176,7 @@ export class Ring
                 return Result{static_cast<size_t>(cqe.UserData), res};
             }
 
-            // completion queue empty (S_FALSE): submit queued reads and block for at least one
+            // if completion queue empty, submit queued reads and block for at least one
             UINT32 submitted = 0;
             HRESULT s = ::SubmitIoRing(handle, 1, INFINITE, &submitted);
             pending = 0;
@@ -192,5 +192,5 @@ export class Ring
     std::vector<Data> buffer;
     std::vector<size_t> free_slots;
     unsigned pending = 0;
-    unsigned sq_entries = 0; // submission queue capacity, from init
+    unsigned sq_entries = 0;
 };

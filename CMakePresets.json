@@ -46,6 +46,16 @@
         "lhs": "${hostSystemName}",
         "rhs": "Windows"
       }
+    },
+    {
+      "name": "msvc2026-release",
+      "generator": "Visual Studio 18 2026",
+      "binaryDir": "build/msvc2026",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
     }
   ],
 
@@ -71,6 +81,16 @@
       "name": "msvc-release",
       "configurePreset": "msvc-release",
       "configuration": "Release"
+    },
+    {
+      "name": "msvc2026-debug",
+      "configurePreset": "msvc2026-release",
+      "configuration": "Debug"
+    },
+    {
+      "name": "msvc2026-release",
+      "configurePreset": "msvc2026-release",
+      "configuration": "Release"
     }
   ],
 
@@ -93,6 +113,12 @@
     {
       "name": "msvc-release",
       "configurePreset": "msvc-release",
+      "configuration": "Release",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "msvc2026-release",
+      "configurePreset": "msvc2026-release",
       "configuration": "Release",
       "output": { "outputOnFailure": true }
     }

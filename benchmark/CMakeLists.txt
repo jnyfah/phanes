@@ -18,6 +18,7 @@ add_executable(phanes_bench
     bench_tree.cpp
     bench_duplicates.cpp
     bench_hasher.cpp
+    bench_io.cpp
 )
 
 target_link_libraries(phanes_bench
