@@ -1,3 +1,4 @@
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <gtest/gtest.h>
@@ -9,11 +10,16 @@ import phanes_hasher;
 // Helper — hash a single buffer in one shot using the streaming API
 // ============================================================
 
+static const std::byte* as_bytes(const uint8_t* p)
+{
+    return reinterpret_cast<const std::byte*>(p);
+}
+
 static uint64_t hash_once(const uint8_t* data, size_t len)
 {
     PhanesHashState state;
     phanes_hash_reset(state);
-    phanes_hash_update(state, data, len);
+    phanes_hash_update(state, as_bytes(data), len);
     return phanes_hash_digest(state);
 }
 
@@ -128,10 +134,10 @@ TEST(PhanesHash, StreamingMatchesSingleCall)
 
     PhanesHashState state;
     phanes_hash_reset(state);
-    phanes_hash_update(state, data, 25);
-    phanes_hash_update(state, data + 25, 25);
-    phanes_hash_update(state, data + 50, 25);
-    phanes_hash_update(state, data + 75, 25);
+    phanes_hash_update(state, as_bytes(data), 25);
+    phanes_hash_update(state, as_bytes(data + 25), 25);
+    phanes_hash_update(state, as_bytes(data + 50), 25);
+    phanes_hash_update(state, as_bytes(data + 75), 25);
     uint64_t streamed = phanes_hash_digest(state);
 
     EXPECT_EQ(single, streamed);
@@ -149,9 +155,9 @@ TEST(PhanesHash, StreamingArbitraryChunks)
     // chunk sizes that cross 32-byte block boundaries
     PhanesHashState state;
     phanes_hash_reset(state);
-    phanes_hash_update(state, data, 7);
-    phanes_hash_update(state, data + 7, 33);
-    phanes_hash_update(state, data + 40, 56);
+    phanes_hash_update(state, as_bytes(data), 7);
+    phanes_hash_update(state, as_bytes(data + 7), 33);
+    phanes_hash_update(state, as_bytes(data + 40), 56);
     uint64_t streamed = phanes_hash_digest(state);
 
     EXPECT_EQ(single, streamed);
@@ -167,8 +173,8 @@ TEST(PhanesHash, StreamingUnalignedThenLargeChunk)
 
     PhanesHashState state;
     phanes_hash_reset(state);
-    phanes_hash_update(state, data, 32); // 1 block → blocks=1 (unaligned)
-    phanes_hash_update(state, data + 32, 256); // large chunk → triggers 4x loop
+    phanes_hash_update(state, as_bytes(data), 32); // 1 block → blocks=1 (unaligned)
+    phanes_hash_update(state, as_bytes(data + 32), 256); // large chunk → triggers 4x loop
     uint64_t streamed = phanes_hash_digest(state);
 
     EXPECT_EQ(single, streamed); // fails if you delete the realignment loop

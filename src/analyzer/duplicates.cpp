@@ -1,8 +1,10 @@
 module;
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <condition_variable>
+#include <cstddef>
 #include <cstdint>
 #include <deque>
 #include <expected>
@@ -11,7 +13,6 @@ module;
 #include <memory>
 #include <mutex>
 #include <ranges>
-#include <string>
 #include <thread>
 #include <unordered_map>
 #include <vector>
@@ -34,11 +35,10 @@ module analyzer;
 import phanes_deque;
 import phanes_hasher;
 
-struct HashError
-{
-    std::string reason;
-};
+import phanes_io;
+
 using Hash = std::uint64_t;
+using HashMap = std::unordered_map<Hash, std::vector<FileId>>;
 
 // On Windows, OneDrive "Files On-Demand" files are placeholders: opening their
 // content triggers a download (hydration). We do NOT hash those
@@ -58,139 +58,255 @@ static auto is_cloud_placeholder(const std::filesystem::path& path) -> bool
 #endif
 }
 
-// Fast hash, samples only 12kb
-auto sample_hash_file(const std::filesystem::path& path,
-                      std::uintmax_t file_size,
-                      PhanesHashState& state) -> std::expected<Hash, HashError>
+struct Meta
+{
+    size_t file_idx;
+    int region;
+};
+
+struct Acc
+{
+    std::array<std::size_t, 3> tag{};
+    std::array<int, 3> res{};
+    std::array<bool, 3> has{};
+    int arrived = 0;
+    int submitted = 0;
+};
+
+struct Active
+{
+    FileId id;
+    std::uint64_t size;
+    std::uint64_t offset;
+    PhanesHashState state;
+};
+
+auto prefilter_group(Ring& ring,
+                     const DuplicateGroup& group,
+                     PhanesHashState& state,
+                     const DirectoryTree& tree) -> HashMap
 {
     constexpr std::uintmax_t SAMPLE = 4096;
+    HashMap result;
 
-#ifdef __unix__
-    int fd = ::open(path.c_str(), O_RDONLY);
-    if (fd == -1)
+    constexpr int WINDOW = 512;
+    const auto file_size = group.size;
+
+    unsigned expected = 1; // front always
+    if (group.size > 2 * SAMPLE)
+        expected++; // back
+    if (group.size > 3 * SAMPLE)
+        expected++; // mid
+
+    std::vector<Meta> meta;
+    std::vector<Acc> acc(group.files.size());
+
+    size_t next_file = 0;
+    int in_flight = 0; // reads submitted but not yet released (in flight + held for reassembly)
+
+    // queue every applicable region of one file
+    auto submit_file = [&](size_t fi)
     {
-        return std::unexpected(HashError{"cannot open: " + path.string()});
-    }
-
-    phanes_hash_reset(state);
-
-    char buf[SAMPLE];
-
-    // front
-    ssize_t n = ::pread(fd, buf, SAMPLE, 0);
-    if (n > 0)
-    {
-        phanes_hash_update(state, reinterpret_cast<const std::uint8_t*>(buf), static_cast<size_t>(n));
-    }
-
-    // middle
-    if (file_size > 3 * SAMPLE)
-    {
-        n = ::pread(fd, buf, SAMPLE, static_cast<off_t>(file_size / 2 - SAMPLE / 2));
-        if (n > 0)
+        const auto& path = tree.files[group.files[fi]].path;
+        int n = 0;
+        auto add = [&](int64_t off, int r)
         {
-            phanes_hash_update(state, reinterpret_cast<const std::uint8_t*>(buf), static_cast<size_t>(n));
+            if (auto tag = ring.submit(path, SAMPLE, off); tag)
+            {
+                if (*tag >= meta.size())
+                {
+                    meta.resize(*tag + 1);
+                }
+                meta[*tag] = {fi, r};
+                n++;
+            }
+        };
+        add(0, 0); // front
+        if (group.size > 3 * SAMPLE)
+            add(static_cast<int64_t>(file_size / 2 - SAMPLE / 2), 1); // middle
+        if (group.size > 2 * SAMPLE)
+            add(static_cast<int64_t>(file_size) - static_cast<int64_t>(SAMPLE), 2); // back
+        acc[fi].submitted = n;
+        in_flight += n;
+    };
+
+    // submit all regions
+    auto pump = [&]
+    {
+        while (next_file < group.files.size() && in_flight + static_cast<int>(expected) <= WINDOW)
+        {
+            submit_file(next_file++);
+        }
+    };
+
+    pump();
+
+    while (in_flight > 0)
+    {
+        auto res = ring.next();
+        if (!res)
+        {
+            continue;
+        }
+
+        auto [fid, region] = meta[res->tag];
+        auto& a = acc[fid];
+        a.tag[region] = res->tag;
+        a.res[region] = res->res;
+        a.has[region] = true;
+        a.arrived++;
+
+        // a file settles once all of its submitted reads are back
+        if (a.arrived == a.submitted)
+        {
+            if (a.submitted == static_cast<int>(expected)) // fully sampled -> hash in region order
+            {
+                phanes_hash_reset(state);
+                for (size_t r = 0; r < a.has.size(); ++r)
+                {
+                    if (a.has[r] && a.res[r] > 0)
+                    {
+                        phanes_hash_update(state, ring.data(a.tag[r]).data(), static_cast<size_t>(a.res[r]));
+                    }
+                }
+                result[phanes_hash_digest(state)].push_back(group.files[fid]);
+            }
+
+            // release this file's slots and pull in more work
+            for (size_t r = 0; r < a.has.size(); ++r)
+            {
+                if (a.has[r])
+                {
+                    ring.release(a.tag[r]);
+                    in_flight--;
+                }
+            }
+            pump();
         }
     }
 
-    // back
-    if (file_size > SAMPLE)
-    {
-        n = ::pread(fd, buf, SAMPLE, static_cast<off_t>(file_size) - static_cast<off_t>(SAMPLE));
-        if (n > 0)
-        {
-            phanes_hash_update(state, reinterpret_cast<const std::uint8_t*>(buf), static_cast<size_t>(n));
-        }
-    }
-
-    ::close(fd);
-    return phanes_hash_digest(state);
-
-#else
-    std::ifstream file(path, std::ios::binary);
-    if (!file)
-    {
-        return std::unexpected(HashError{"cannot open: " + path.string()});
-    }
-
-    phanes_hash_reset(state);
-
-    char buf[SAMPLE];
-
-    file.read(buf, SAMPLE);
-    if (file.gcount() > 0)
-    {
-        phanes_hash_update(state, reinterpret_cast<const std::uint8_t*>(buf), static_cast<size_t>(file.gcount()));
-    }
-
-    if (file_size > 3 * SAMPLE)
-    {
-        file.seekg(static_cast<std::streamoff>(file_size / 2 - SAMPLE / 2));
-        file.read(buf, SAMPLE);
-        if (file.gcount() > 0)
-        {
-            phanes_hash_update(state, reinterpret_cast<const std::uint8_t*>(buf), static_cast<size_t>(file.gcount()));
-        }
-    }
-
-    if (file_size > SAMPLE)
-    {
-        file.seekg(static_cast<std::streamoff>(file_size) - static_cast<std::streamoff>(SAMPLE));
-        file.read(buf, SAMPLE);
-        if (file.gcount() > 0)
-        {
-            phanes_hash_update(state, reinterpret_cast<const std::uint8_t*>(buf), static_cast<size_t>(file.gcount()));
-        }
-    }
-
-    return phanes_hash_digest(state);
-#endif
+    ring.reset();
+    return result;
 }
 
-// Full file hash
-auto hash_file(const std::filesystem::path& path, PhanesHashState& state) -> std::expected<Hash, HashError>
+auto hash_file(Ring& ring, const HashMap& by_sample, PhanesHashState& state, const DirectoryTree& tree) -> HashMap
 {
-#ifdef __unix__
-    int fd = ::open(path.c_str(), O_RDONLY);
-    if (fd == -1)
+
+    HashMap result;
+
+    // chunk size per read, and how many chunks in flight per worker
+    // peak full-hash memory ≈ n_threads * WINDOW * CHUNK
+    constexpr std::uint64_t CHUNK = 4ULL * 1024 * 1024;
+    constexpr int WINDOW = 16;
+
+    int in_flight = 0;
+
+    // flatten all candidates into a worklist
+    std::vector<FileId> worklist;
+    for (auto& [h, cands] : by_sample)
     {
-        return std::unexpected(HashError{"cannot open: " + path.string()});
+        if (cands.size() >= 2)
+        {
+            for (FileId id : cands)
+            {
+                worklist.push_back(id);
+            }
+        }
     }
 
-    phanes_hash_reset(state);
+    std::vector<Active> active;
+    std::vector<size_t> tag_to_active;
+    size_t next_file = 0;
 
-    char buf[262144];
-    ssize_t n;
-    while ((n = ::read(fd, buf, sizeof(buf))) > 0)
+    // chunk-0 of the first WINDOW files
+    while (in_flight < WINDOW && next_file < worklist.size())
     {
-        phanes_hash_update(state, reinterpret_cast<const std::uint8_t*>(buf), static_cast<size_t>(n));
+        // initial submit for all files that can fit into W
+        FileId id = worklist[next_file++];
+        size_t index = active.size();
+        active.push_back({id, tree.files[id].size, 0, {}});
+        phanes_hash_reset(active[index].state);
+
+        const auto& path = tree.files[id].path;
+        if (auto t = ring.submit(path, CHUNK, 0); t)
+        {
+            if (*t >= tag_to_active.size())
+            {
+                tag_to_active.resize(*t + 1);
+            }
+            tag_to_active[*t] = index;
+            in_flight++;
+        }
     }
 
-    ::close(fd);
-
-    if (n < 0)
+    while (in_flight > 0)
     {
-        return std::unexpected(HashError{"read error: " + path.string()});
+
+        auto r = ring.next();
+        if (!r)
+        {
+            continue;
+        }
+        in_flight--;
+
+        auto index = tag_to_active[r->tag];
+
+        // read error: drop this chunk, recycle its slot
+        if (r->res < 0)
+        {
+            ring.release(r->tag);
+            continue;
+        }
+
+        phanes_hash_update(active[index].state, ring.data(r->tag).data(), static_cast<size_t>(r->res));
+        active[index].offset += r->res;
+        ring.release(r->tag);
+
+        if (active[index].offset < active[index].size)
+        {
+            // submit next chunk
+            const auto& path = tree.files[active[index].id].path;
+            if (auto t = ring.submit(path, CHUNK, active[index].offset); t)
+            {
+                if (*t >= tag_to_active.size())
+                {
+                    tag_to_active.resize(*t + 1);
+                }
+                tag_to_active[*t] = index;
+                in_flight++;
+            }
+        }
+        else
+        {
+            // file done
+            Hash h = phanes_hash_digest(active[index].state);
+            result[h].push_back(active[index].id);
+
+            // reuse this finished slot for the next waiting file
+            if (next_file < worklist.size())
+            {
+                FileId id = worklist[next_file++];
+                active[index].id = id;
+                active[index].size = tree.files[id].size;
+                active[index].offset = 0;
+                phanes_hash_reset(active[index].state);
+
+                const auto& path = tree.files[id].path;
+                if (auto t = ring.submit(path, CHUNK, 0); t)
+                {
+                    if (*t >= tag_to_active.size())
+                    {
+                        tag_to_active.resize(*t + 1);
+                    }
+                    tag_to_active[*t] = index;
+                    in_flight++;
+                }
+            }
+        }
     }
 
-    return phanes_hash_digest(state);
-#else
-    std::ifstream file(path, std::ios::binary);
-    if (!file)
-    {
-        return std::unexpected(HashError{"cannot open: " + path.string()});
-    }
-
-    phanes_hash_reset(state);
-
-    char buf[262144];
-    while (file.read(buf, sizeof(buf)) || file.gcount() > 0)
-    {
-        phanes_hash_update(state, reinterpret_cast<const std::uint8_t*>(buf), static_cast<size_t>(file.gcount()));
-    }
-
-    return phanes_hash_digest(state);
-#endif
+    ring.reset();
+    return result;
 }
 
 std::generator<DuplicateGroup> group_files_by_size(const DirectoryTree& tree)
@@ -205,9 +321,10 @@ std::generator<DuplicateGroup> group_files_by_size(const DirectoryTree& tree)
         }
     }
 
-    // sort
+    // sort by size
     std::ranges::sort(ids, {}, [&](FileId id) { return tree.files[id].size; });
 
+    // group by file size
     for (auto chunk :
          ids | std::views::chunk_by([&](FileId a, FileId b) { return tree.files[a].size == tree.files[b].size; }))
     {
@@ -221,29 +338,23 @@ std::generator<DuplicateGroup> group_files_by_size(const DirectoryTree& tree)
 
 std::generator<DuplicateGroup> compute_duplicate_groups(const DirectoryTree& tree, std::size_t num_threads)
 {
+    // group each file in the tree by size
     auto size_groups = std::ranges::to<std::vector>(group_files_by_size(tree));
     if (size_groups.empty())
     {
         co_return;
     }
 
-    std::ranges::sort(size_groups,
-                      [&](const DuplicateGroup& a, const DuplicateGroup& b)
-                      {
-                          if (a.size != b.size)
-                              return a.size > b.size;
-                          return tree.files[a.files[0]].path < tree.files[b.files[0]].path;
-                      });
-
     const std::size_t total = size_groups.size();
-    const std::size_t hw = std::max(1u, std::thread::hardware_concurrency());
-    const std::size_t n_threads = (num_threads == 0) ? hw * 2 : std::max(std::size_t{1}, num_threads);
+    const std::size_t n_threads = std::jthread::hardware_concurrency();
 
     auto tasks_owner = std::make_unique<LockFreeDeque<std::size_t>>(1024, n_threads);
     auto& tasks = *tasks_owner;
+    constexpr unsigned ring_entries = 1024;
+
     for (std::size_t i = 0; i < total; ++i)
     {
-        tasks.push_back(i); // add tasks
+        tasks.push_back(i); // add tasks to deque
     }
 
     std::mutex mtx;
@@ -253,9 +364,11 @@ std::generator<DuplicateGroup> compute_duplicate_groups(const DirectoryTree& tre
 
     auto worker = [&](std::size_t id)
     {
-        PhanesHashState state; // one per thread, reused across every file (reset per hash)
+        Ring uring;
+        const bool ok = uring.init(ring_entries).has_value();
+        PhanesHashState state;
 
-        while (!tasks.empty())
+        while (ok && !tasks.empty())
         {
             auto idx = tasks.steal_front(id);
             if (!idx)
@@ -268,15 +381,7 @@ std::generator<DuplicateGroup> compute_duplicate_groups(const DirectoryTree& tre
             // files less than 4kb
             if (group.size <= 4096)
             {
-                std::unordered_map<Hash, std::vector<FileId>> by_hash;
-                for (FileId id : group.files)
-                {
-                    auto hash = sample_hash_file(tree.files[id].path, tree.files[id].size, state);
-                    if (hash)
-                    {
-                        by_hash[*hash].push_back(id);
-                    }
-                }
+                auto by_hash = prefilter_group(uring, group, state, tree);
                 // this are genuine duplicates
                 for (auto& [hash, files] : by_hash)
                 {
@@ -292,35 +397,12 @@ std::generator<DuplicateGroup> compute_duplicate_groups(const DirectoryTree& tre
                 continue;
             }
 
-            // stage 1 — sample hash
-            std::unordered_map<Hash, std::vector<FileId>> by_sample;
-            for (FileId id : group.files)
-            {
-                auto hash = sample_hash_file(tree.files[id].path, tree.files[id].size, state);
-                if (hash)
-                {
-                    by_sample[*hash].push_back(id);
-                }
-            }
+            // files > 4kb
+            // sample hash
+            auto by_sample = prefilter_group(uring, group, state, tree);
 
-            // stage 2 — full hash only for survivors
-            std::unordered_map<Hash, std::vector<FileId>> by_full;
-            for (auto& [sample, candidates] : by_sample)
-            {
-                if (candidates.size() < 2)
-                {
-                    continue; //  can't be a duplicate
-                }
-
-                for (FileId id : candidates)
-                {
-                    auto hash = hash_file(tree.files[id].path, state);
-                    if (hash)
-                    {
-                        by_full[*hash].push_back(id);
-                    }
-                }
-            }
+            // full hash only for survivors
+            auto by_full = hash_file(uring, by_sample, state, tree);
 
             for (auto& [hash, files] : by_full)
             {

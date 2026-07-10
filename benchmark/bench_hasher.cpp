@@ -1,4 +1,5 @@
 #include <benchmark/benchmark.h>
+#include <cstddef>
 #include <cstdint>
 #include <vector>
 
@@ -7,6 +8,12 @@ import phanes_hasher;
 
 namespace
 {
+
+// Test vectors are uint8_t; the hasher takes raw bytes.
+const std::byte* as_bytes(const uint8_t* p)
+{
+    return reinterpret_cast<const std::byte*>(p);
+}
 
 std::vector<uint8_t> make_data(std::size_t size)
 {
@@ -38,7 +45,7 @@ static void BM_PhanesHash_1MB(benchmark::State& bstate)
     {
         benchmark::DoNotOptimize(DATA_1MB.data()); // input "could change" — block hoisting
         phanes_hash_reset(hs);
-        phanes_hash_update(hs, DATA_1MB.data(), DATA_1MB.size());
+        phanes_hash_update(hs, as_bytes(DATA_1MB.data()), DATA_1MB.size());
         benchmark::DoNotOptimize(phanes_hash_digest(hs));
     }
     bstate.SetBytesProcessed(bstate.iterations() * static_cast<int64_t>(DATA_1MB.size()));
@@ -56,7 +63,7 @@ static void BM_PhanesHash_12KB(benchmark::State& bstate)
     {
         benchmark::DoNotOptimize(DATA_12KB.data());
         phanes_hash_reset(hs);
-        phanes_hash_update(hs, DATA_12KB.data(), DATA_12KB.size());
+        phanes_hash_update(hs, as_bytes(DATA_12KB.data()), DATA_12KB.size());
         benchmark::DoNotOptimize(phanes_hash_digest(hs));
     }
     bstate.SetBytesProcessed(bstate.iterations() * static_cast<int64_t>(DATA_12KB.size()));

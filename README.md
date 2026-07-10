@@ -14,6 +14,7 @@ Phanes is a fast, multithreaded command-line tool for analyzing filesystem struc
 - Parallel directory scanning via a lock-free work-stealing thread pool
 - Concurrent action dispatch: multiple report types computed simultaneously
 - Duplicate file detection: size grouping → multi-sample hashing → full-content verification, parallelized across files and streamed to output as matches are confirmed
+- Asynchronous content reads via `io_uring` (Linux) and Windows `IoRing`, behind one interface -- many reads stay in flight so I/O overlaps with hashing
 - Custom SIMD (AVX2) content hash with four independent accumulators, written for this workload
 - Google Benchmark suite covering the analyzer, parallel scanner, lock-free deque, duplicate scanner, and hash function
 
