@@ -15,6 +15,12 @@ export enum class NodeKind { File, Directory };
 
 export enum class ErrorKind { PermissionDenied, NotFound, IOError, Unknown, FileError };
 
+export struct NameRef
+{
+    std::uint32_t offset;
+    std::uint32_t len;
+}; 
+
 /* ---------- File node ---------- */
 
 export struct FileNode
@@ -22,7 +28,7 @@ export struct FileNode
     FileId id;
     DirectoryId parent;
 
-    std::filesystem::path path;
+    NameRef name;
 
     std::uintmax_t size = 0;
     std::chrono::sys_time<std::chrono::seconds> modified;
@@ -64,6 +70,8 @@ export struct DirectoryTree
     std::deque<FileNode> files;
     std::deque<DirectoryNode> directories;
     std::deque<ErrorRecord> errors;
+
+    std::vector<char>file_names;
 
     std::chrono::sys_time<std::chrono::seconds> scan_started;
     std::chrono::sys_time<std::chrono::seconds> scan_finished;

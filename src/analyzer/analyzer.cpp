@@ -5,9 +5,11 @@ module;
 #include <chrono>
 #include <cstddef>
 #include <deque>
+#include <filesystem>
 #include <numeric>
 #include <queue>
 #include <ranges>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -100,7 +102,8 @@ std::vector<ExtensionStats> compute_extension_stats(const DirectoryTree& tree)
 
     for (const auto& file : tree.files)
     {
-        auto ext = file.path.extension().string();
+        std::string name(tree.file_names.data() + file.name.offset, file.name.len);
+        auto ext = std::filesystem::path(name).extension().string();
         std::ranges::transform(ext, ext.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 
         auto& [count, size] = map[ext];

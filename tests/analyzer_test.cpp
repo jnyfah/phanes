@@ -1,4 +1,5 @@
 #include <chrono>
+#include <cstdint>
 #include <deque>
 #include <filesystem>
 #include <gtest/gtest.h>
@@ -65,7 +66,9 @@ struct TreeBuilder
         FileNode file;
         file.id = id;
         file.parent = parent_id;
-        file.path = std::move(path);
+        const auto leaf = path.filename().string();
+        file.name = {static_cast<std::uint32_t>(tree.file_names.size()), static_cast<std::uint32_t>(leaf.size())};
+        tree.file_names.insert(tree.file_names.end(), leaf.begin(), leaf.end());
         file.size = size;
         file.modified = modified.value_or(_now);
         file.is_symlink = is_symlink;

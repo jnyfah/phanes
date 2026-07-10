@@ -107,7 +107,10 @@ auto prefilter_group(Ring& ring,
     // queue every applicable region of one file
     auto submit_file = [&](size_t fi)
     {
-        const auto& path = tree.files[group.files[fi]].path;
+        const FileNode& f = tree.files[group.files[fi]];
+        std::string_view leaf{tree.file_names.data() + f.name.offset, f.name.len};
+        const std::filesystem::path path = tree.directories[f.parent].path / std::string(leaf);
+
         int n = 0;
         auto add = [&](int64_t off, int r)
         {
@@ -227,7 +230,10 @@ auto hash_file(Ring& ring, const HashMap& by_sample, PhanesHashState& state, con
         active.push_back({id, tree.files[id].size, 0, {}});
         phanes_hash_reset(active[index].state);
 
-        const auto& path = tree.files[id].path;
+        const FileNode& f = tree.files[id];
+        std::string_view leaf{tree.file_names.data() + f.name.offset, f.name.len};
+        const std::filesystem::path path = tree.directories[f.parent].path / std::string(leaf);
+
         if (auto t = ring.submit(path, CHUNK, 0); t)
         {
             if (*t >= tag_to_active.size())
@@ -265,7 +271,9 @@ auto hash_file(Ring& ring, const HashMap& by_sample, PhanesHashState& state, con
         if (active[index].offset < active[index].size)
         {
             // submit next chunk
-            const auto& path = tree.files[active[index].id].path;
+            const FileNode& f = tree.files[active[index].id];
+            std::string_view leaf{tree.file_names.data() + f.name.offset, f.name.len};
+            const std::filesystem::path path = tree.directories[f.parent].path / std::string(leaf);
             if (auto t = ring.submit(path, CHUNK, active[index].offset); t)
             {
                 if (*t >= tag_to_active.size())
@@ -291,7 +299,10 @@ auto hash_file(Ring& ring, const HashMap& by_sample, PhanesHashState& state, con
                 active[index].offset = 0;
                 phanes_hash_reset(active[index].state);
 
-                const auto& path = tree.files[id].path;
+                const FileNode& f = tree.files[id];
+                std::string_view leaf{tree.file_names.data() + f.name.offset, f.name.len};
+                const std::filesystem::path path = tree.directories[f.parent].path / std::string(leaf);
+
                 if (auto t = ring.submit(path, CHUNK, 0); t)
                 {
                     if (*t >= tag_to_active.size())
@@ -313,9 +324,15 @@ std::generator<DuplicateGroup> group_files_by_size(const DirectoryTree& tree)
 {
     // readable files
     std::vector<FileId> ids;
-    for (const auto file : tree.files)
+    for (const auto& file : tree.files)
     {
-        if (file.readable && !file.is_symlink && file.size > 0 && !is_cloud_placeholder(file.path))
+        if (!file.readable || file.is_symlink || file.size == 0)
+        {
+            continue;
+        }
+        std::string_view leaf{tree.file_names.data() + file.name.offset, file.name.len};
+        const std::filesystem::path path = tree.directories[file.parent].path / std::string(leaf);
+        if (!is_cloud_placeholder(path))
         {
             ids.push_back(file.id);
         }
