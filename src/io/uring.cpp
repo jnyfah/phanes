@@ -51,7 +51,7 @@ struct CqRing
 export struct Data
 {
     std::vector<std::byte> buf;
-    int fd;
+    int fd = -1;
 };
 
 export struct Result
@@ -100,13 +100,24 @@ export class Ring
                 ::close(data.fd);
             }
         }
+
+        for (int fd : files)
+        {
+            if (fd >= 0)
+            {
+                ::close(fd);
+            }
+        }
     }
 
     auto data(size_t tag) const -> const std::vector<std::byte>& { return buffer[tag].buf; }
 
     void release(size_t tag)
     {
-        ::close(buffer[tag].fd);
+        if (buffer[tag].fd >= 0)
+        {
+            ::close(buffer[tag].fd);
+        }
         buffer[tag].fd = -1;
         free_slots.push_back(tag);
     }
@@ -120,16 +131,59 @@ export class Ring
                 ::close(d.fd);
             }
         }
+        for (int fd : files)
+        {
+            if (fd >= 0)
+            {
+                ::close(fd);
+            }
+        }
         buffer.clear();
         free_slots.clear();
+        files.clear();
+        free_files.clear();
         pending = 0;
     }
 
+    // open a file once so many reads can be submitted against it via submit(handle, ...).
+    auto open(const std::filesystem::path& file) -> std::expected<size_t, ErrorKind>
+    {
+        int fd = ::open(file.c_str(), O_RDONLY);
+        if (fd < 0)
+        {
+            return std::unexpected(ErrorKind::FileError);
+        }
+        ::posix_fadvise(fd, 0, 0, POSIX_FADV_SEQUENTIAL); // full-file reads are sequential
+
+        size_t fh;
+        if (!free_files.empty())
+        {
+            fh = free_files.back();
+            free_files.pop_back();
+            files[fh] = fd;
+        }
+        else
+        {
+            fh = files.size();
+            files.push_back(fd);
+        }
+        return fh;
+    }
+
+    void close_file(size_t fh)
+    {
+        if (files[fh] >= 0)
+        {
+            ::close(files[fh]);
+            files[fh] = -1;
+            free_files.push_back(fh);
+        }
+    }
+
+    // single-shot: opens the file and submits one read; the slot owns the fd and closes it on release.
     auto submit(const std::filesystem::path& file, size_t len, int64_t offset) -> std::expected<size_t, ErrorKind>
     {
-        // SQ-full guard
-        auto sq_head = std::atomic_ref<__u32>(*sring.head).load(std::memory_order_acquire);
-        if ((*sring.tail - sq_head) >= param.sq_entries)
+        if (sq_full())
         {
             return std::unexpected(ErrorKind::IOError);
         }
@@ -140,42 +194,22 @@ export class Ring
         {
             return std::unexpected(ErrorKind::FileError);
         }
+        size_t tag = alloc_slot(len);
+        buffer[tag].fd = fd; // slot owns this fd
+        queue_read(tag, fd, len, offset);
+        return tag;
+    }
 
-        size_t tag;
-
-        if (!free_slots.empty())
+    // read against an already-open handle; the slot does not own the fd (close_file does).
+    auto submit(size_t fh, size_t len, int64_t offset) -> std::expected<size_t, ErrorKind>
+    {
+        if (sq_full())
         {
-            tag = free_slots.back();
-            free_slots.pop_back();
+            return std::unexpected(ErrorKind::IOError);
         }
-        else
-        {
-            tag = buffer.size();
-            buffer.emplace_back();
-        }
-
-        buffer[tag].buf.resize(len);
-        buffer[tag].fd = fd;
-
-        auto tail = *sring.tail;
-        auto index = tail & *sring.mask;
-
-        // fill in data into the SQE
-        auto sqentry = &sqe[index];
-        std::memset(sqentry, 0, sizeof(*sqentry));
-        sqentry->fd = fd;
-        sqentry->opcode = IORING_OP_READ;
-        sqentry->len = len;
-        sqentry->addr = reinterpret_cast<std::uint64_t>(buffer[tag].buf.data());
-        sqentry->user_data = tag;
-        sqentry->off = offset;
-
-        // sq ring references sqe via index
-        sring.array[index] = index;
-
-        // release so the kernel can observe the write
-        std::atomic_ref<__u32>(*sring.tail).store(tail + 1, std::memory_order_release);
-        pending++; // queued, but not yet submitted to the kernel
+        size_t tag = alloc_slot(len);
+        buffer[tag].fd = -1; // the open handle owns the fd, not the slot
+        queue_read(tag, files[fh], len, offset);
         return tag;
     }
 
@@ -291,6 +325,49 @@ export class Ring
     }
 
   private:
+    auto sq_full() const -> bool
+    {
+        auto sq_head = std::atomic_ref<__u32>(*sring.head).load(std::memory_order_acquire);
+        return (*sring.tail - sq_head) >= param.sq_entries;
+    }
+
+    auto alloc_slot(size_t len) -> size_t
+    {
+        size_t tag;
+        if (!free_slots.empty())
+        {
+            tag = free_slots.back();
+            free_slots.pop_back();
+        }
+        else
+        {
+            tag = buffer.size();
+            buffer.emplace_back();
+        }
+        buffer[tag].buf.resize(len);
+        return tag;
+    }
+
+    void queue_read(size_t tag, int fd, size_t len, int64_t offset)
+    {
+        auto tail = *sring.tail;
+        auto index = tail & *sring.mask;
+
+        auto sqentry = &sqe[index];
+        std::memset(sqentry, 0, sizeof(*sqentry));
+        sqentry->fd = fd;
+        sqentry->opcode = IORING_OP_READ;
+        sqentry->len = len;
+        sqentry->addr = reinterpret_cast<std::uint64_t>(buffer[tag].buf.data());
+        sqentry->user_data = tag;
+        sqentry->off = offset;
+        sring.array[index] = index;
+
+        // release so the kernel can observe the write
+        std::atomic_ref<__u32>(*sring.tail).store(tail + 1, std::memory_order_release);
+        pending++; // queued, but not yet submitted to the kernel
+    }
+
     SqRing sring{};
     CqRing cring{};
 
@@ -309,4 +386,7 @@ export class Ring
 
     std::vector<size_t> free_slots; // indices ready to reuse
     unsigned pending = 0; // SQEs queued but not yet handed to the kernel
+
+    std::vector<int> files;
+    std::vector<size_t> free_files;
 };

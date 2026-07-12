@@ -49,6 +49,13 @@ export class Ring
                 ::CloseHandle(d.fd);
             }
         }
+        for (HANDLE fd : files)
+        {
+            if (fd != INVALID_HANDLE_VALUE)
+            {
+                ::CloseHandle(fd);
+            }
+        }
         if (handle)
         {
             ::CloseIoRing(handle);
@@ -92,11 +99,61 @@ export class Ring
                 ::CloseHandle(d.fd);
             }
         }
+        for (HANDLE fd : files)
+        {
+            if (fd != INVALID_HANDLE_VALUE)
+            {
+                ::CloseHandle(fd);
+            }
+        }
         buffer.clear();
         free_slots.clear();
+        files.clear();
+        free_files.clear();
         pending = 0;
     }
 
+    // open a file once so many reads can be submitted against it via submit(handle, ...).
+    auto open(const std::filesystem::path& file) -> std::expected<size_t, ErrorKind>
+    {
+        HANDLE fd = ::CreateFileW(file.c_str(),
+                                  GENERIC_READ,
+                                  FILE_SHARE_READ,
+                                  nullptr,
+                                  OPEN_EXISTING,
+                                  FILE_FLAG_SEQUENTIAL_SCAN,
+                                  nullptr);
+        if (fd == INVALID_HANDLE_VALUE)
+        {
+            return std::unexpected(ErrorKind::FileError);
+        }
+
+        size_t fh;
+        if (!free_files.empty())
+        {
+            fh = free_files.back();
+            free_files.pop_back();
+            files[fh] = fd;
+        }
+        else
+        {
+            fh = files.size();
+            files.push_back(fd);
+        }
+        return fh;
+    }
+
+    void close_file(size_t fh)
+    {
+        if (files[fh] != INVALID_HANDLE_VALUE)
+        {
+            ::CloseHandle(files[fh]);
+            files[fh] = INVALID_HANDLE_VALUE;
+            free_files.push_back(fh);
+        }
+    }
+
+    // single-shot: opens the file and submits one read; the slot owns the fd and closes it on release.
     auto submit(const std::filesystem::path& file, size_t len, int64_t offset) -> std::expected<size_t, ErrorKind>
     {
         // SQ-full guard: cannot queue more than the submission queue holds before a submit drains it
@@ -117,42 +174,32 @@ export class Ring
         {
             return std::unexpected(ErrorKind::FileError);
         }
-
-        size_t tag;
-        if (!free_slots.empty())
-        {
-            tag = free_slots.back();
-            free_slots.pop_back();
-        }
-        else
-        {
-            tag = buffer.size();
-            buffer.emplace_back();
-        }
-
-        buffer[tag].buf.resize(len);
-        buffer[tag].fd = fd;
-
-        auto fileRef = IoRingHandleRefFromHandle(fd);
-        auto bufRef = IoRingBufferRefFromPointer(buffer[tag].buf.data());
-
-        // queue in submission queue
-        HRESULT hr = ::BuildIoRingReadFile(handle,
-                                           fileRef,
-                                           bufRef,
-                                           static_cast<UINT32>(len),
-                                           static_cast<UINT64>(offset),
-                                           static_cast<UINT_PTR>(tag),
-                                           IOSQE_FLAGS_NONE);
-        if (FAILED(hr))
+        size_t tag = alloc_slot(len);
+        buffer[tag].fd = fd; // slot owns this fd
+        if (!queue_read(tag, fd, len, offset))
         {
             ::CloseHandle(fd);
             buffer[tag].fd = INVALID_HANDLE_VALUE;
             free_slots.push_back(tag);
             return std::unexpected(ErrorKind::IOError);
         }
+        return tag;
+    }
 
-        pending++;
+    // read against an already-open handle; the slot does not own the fd (close_file does).
+    auto submit(size_t fh, size_t len, int64_t offset) -> std::expected<size_t, ErrorKind>
+    {
+        if (pending >= sq_entries)
+        {
+            return std::unexpected(ErrorKind::IOError);
+        }
+        size_t tag = alloc_slot(len);
+        buffer[tag].fd = INVALID_HANDLE_VALUE; // the open handle owns the fd, not the slot
+        if (!queue_read(tag, files[fh], len, offset))
+        {
+            free_slots.push_back(tag);
+            return std::unexpected(ErrorKind::IOError);
+        }
         return tag;
     }
 
@@ -188,9 +235,48 @@ export class Ring
     }
 
   private:
+    auto alloc_slot(size_t len) -> size_t
+    {
+        size_t tag;
+        if (!free_slots.empty())
+        {
+            tag = free_slots.back();
+            free_slots.pop_back();
+        }
+        else
+        {
+            tag = buffer.size();
+            buffer.emplace_back();
+        }
+        buffer[tag].buf.resize(len);
+        return tag;
+    }
+
+    auto queue_read(size_t tag, HANDLE fd, size_t len, int64_t offset) -> bool
+    {
+        auto fileRef = IoRingHandleRefFromHandle(fd);
+        auto bufRef = IoRingBufferRefFromPointer(buffer[tag].buf.data());
+        HRESULT hr = ::BuildIoRingReadFile(handle,
+                                           fileRef,
+                                           bufRef,
+                                           static_cast<UINT32>(len),
+                                           static_cast<UINT64>(offset),
+                                           static_cast<UINT_PTR>(tag),
+                                           IOSQE_FLAGS_NONE);
+        if (FAILED(hr))
+        {
+            return false;
+        }
+        pending++;
+        return true;
+    }
+
     HIORING handle{};
     std::vector<Data> buffer;
     std::vector<size_t> free_slots;
     unsigned pending = 0;
     unsigned sq_entries = 0;
+
+    std::vector<HANDLE> files;
+    std::vector<size_t> free_files;
 };
