@@ -148,7 +148,7 @@ static void BM_Duplicates_FilterEffectiveness(benchmark::State& state)
 
     constexpr int groups = 5;
     constexpr int copies = 4;
-    constexpr std::size_t file_size = 256 * 1024; 
+    constexpr std::size_t file_size = 256 * 1024;
 
     create_fixture(root, groups, copies, file_size, num_unique);
     auto tree = build_tree(root);
