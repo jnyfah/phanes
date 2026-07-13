@@ -150,7 +150,7 @@ void Scanner::scan_directory(DirectoryId id)
         }
     }
 
-    // update 
+    // update
     std::size_t base = 0;
     if (!local_arena.empty())
     {

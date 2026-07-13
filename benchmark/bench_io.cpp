@@ -15,8 +15,8 @@ namespace
 struct Corpus
 {
     fs::path dir;
-    fs::path big; // one large file, read in chunks
-    std::vector<fs::path> small; // many small files, read with a window
+    fs::path big;
+    std::vector<fs::path> small;
 
     Corpus()
     {
@@ -54,7 +54,6 @@ const Corpus& corpus()
 
 } // namespace
 
-// Stream one 16 MB file in 4 MB chunks — the hash_file pattern.
 static void BM_Ring_ChunkedRead(benchmark::State& state)
 {
     const auto& c = corpus();
@@ -93,7 +92,6 @@ static void BM_Ring_ChunkedRead(benchmark::State& state)
 }
 BENCHMARK(BM_Ring_ChunkedRead)->Unit(benchmark::kMicrosecond);
 
-// Read 512 small files keeping `window` reads in flight — the prefilter pattern.
 static void BM_Ring_ManyFilesWindowed(benchmark::State& state)
 {
     const auto& c = corpus();

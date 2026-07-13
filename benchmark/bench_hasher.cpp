@@ -9,7 +9,6 @@ import phanes_hasher;
 namespace
 {
 
-// Test vectors are uint8_t; the hasher takes raw bytes.
 const std::byte* as_bytes(const uint8_t* p)
 {
     return reinterpret_cast<const std::byte*>(p);

@@ -22,10 +22,14 @@ static void BM_Deque_PushPop_Fresh(benchmark::State& state)
         LockFreeDeque<std::size_t> deque;
 
         for (std::size_t i = 0; i < N; ++i)
+        {
             deque.push_back(i);
+        }
         benchmark::ClobberMemory();
         for (std::size_t i = 0; i < N; ++i)
+        {
             benchmark::DoNotOptimize(deque.pop_back());
+        }
         benchmark::ClobberMemory();
     }
 
@@ -39,18 +43,27 @@ static void BM_Deque_PushPop_Steady(benchmark::State& state)
     const auto N = static_cast<std::size_t>(state.range(0));
     LockFreeDeque<std::size_t> deque;
 
+    // warm up
     for (std::size_t i = 0; i < N; ++i)
+    {
         deque.push_back(i);
+    }
     for (std::size_t i = 0; i < N; ++i)
+    {
         benchmark::DoNotOptimize(deque.pop_back());
+    }
 
     for (auto _ : state)
     {
         for (std::size_t i = 0; i < N; ++i)
+        {
             deque.push_back(i);
+        }
         benchmark::ClobberMemory();
         for (std::size_t i = 0; i < N; ++i)
+        {
             benchmark::DoNotOptimize(deque.pop_back());
+        }
         benchmark::ClobberMemory();
     }
 
@@ -78,27 +91,38 @@ static void BM_Deque_StealContention(benchmark::State& state)
             [&, t]() noexcept
             {
                 while (!start.load(std::memory_order_acquire))
+                {
                     std::this_thread::yield();
+                }
 
                 while (!stop.load(std::memory_order_relaxed))
+                {
                     benchmark::DoNotOptimize(deque.steal_front(static_cast<std::size_t>(t)));
+                }
             });
     }
     start.store(true, std::memory_order_release);
 
+    // main thread- owner
     for (auto _ : state)
     {
         for (std::size_t i = 0; i < N; ++i)
+        {
             deque.push_back(i);
+        }
         benchmark::ClobberMemory();
         for (std::size_t i = 0; i < N; ++i)
+        {
             benchmark::DoNotOptimize(deque.pop_back());
+        }
         benchmark::ClobberMemory();
     }
 
     stop.store(true, std::memory_order_relaxed);
     for (auto& t : thieves)
+    {
         t.join();
+    }
 
     state.SetItemsProcessed(state.iterations() * static_cast<int64_t>(N) * 2);
 }
@@ -136,13 +160,17 @@ void run_false_sharing_bench(benchmark::State& state)
             [&]()
             {
                 for (std::size_t i = 0; i < iters; ++i)
+                {
                     counters.a.fetch_add(1, std::memory_order_relaxed);
+                }
             });
         std::jthread t2(
             [&]()
             {
                 for (std::size_t i = 0; i < iters; ++i)
+                {
                     counters.b.fetch_add(1, std::memory_order_relaxed);
+                }
             });
 
         t1.join();

@@ -19,7 +19,7 @@ export struct NameRef
 {
     std::uint32_t offset;
     std::uint32_t len;
-}; 
+};
 
 /* ---------- File node ---------- */
 
@@ -71,7 +71,7 @@ export struct DirectoryTree
     std::deque<DirectoryNode> directories;
     std::deque<ErrorRecord> errors;
 
-    std::vector<char>file_names;
+    std::vector<char> file_names;
 
     std::chrono::sys_time<std::chrono::seconds> scan_started;
     std::chrono::sys_time<std::chrono::seconds> scan_finished;
