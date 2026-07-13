@@ -23,6 +23,7 @@ struct Scanner
     DirectoryTree tree;
     std::shared_mutex dir_mutex; // shared for reads/per-node writes, exclusive for push_back
     std::mutex guard; // exclusive for tree.files and tree.errors
+    std::mutex arena_mutex;
     std::atomic_int active_tasks{
         0}; // counter of how many directory scans are currently in flight, we use to know when w are done scanning
     std::atomic<DirectoryId> next_dir_id{0};
@@ -42,6 +43,7 @@ void Scanner::scan_directory(DirectoryId id)
     std::vector<DirectoryNode> local_dirs;
     std::vector<FileNode> local_files;
     std::vector<ErrorRecord> local_errors;
+    std::vector<char> local_arena;
 
     std::error_code type_ec, size_ec, time_ec, itr_ec;
 
@@ -77,14 +79,23 @@ void Scanner::scan_directory(DirectoryId id)
             local_dirs.push_back(std::move(directory));
             break;
         }
+        // file case todo make arena wstring or utf8 conversion
         case std::filesystem::file_type::regular:
         case std::filesystem::file_type::symlink:
         {
+
+            auto getRef = [&](const std::string& name)
+            {
+                NameRef ref{static_cast<std::uint32_t>(local_arena.size()), static_cast<std::uint32_t>(name.size())};
+                local_arena.insert(local_arena.end(), name.begin(), name.end());
+                return ref;
+            };
+
             const bool is_symlink = status.type() == std::filesystem::file_type::symlink;
 
             FileNode file{};
             file.parent = id;
-            file.path = entry.path();
+            file.name = getRef(entry.path().filename().string());
             file.is_symlink = is_symlink;
 
             if (!is_symlink)
@@ -139,6 +150,16 @@ void Scanner::scan_directory(DirectoryId id)
         }
     }
 
+    // update
+    std::size_t base = 0;
+    if (!local_arena.empty())
+    {
+        std::lock_guard lock(arena_mutex);
+        base = tree.file_names.size();
+
+        tree.file_names.insert(tree.file_names.end(), local_arena.begin(), local_arena.end());
+    }
+
     // flush local files and errors, one lock acquisition per directory scan
     std::vector<FileId> local_file_ids;
     local_file_ids.reserve(local_files.size());
@@ -149,6 +170,7 @@ void Scanner::scan_directory(DirectoryId id)
             FileId fid = next_file_id.fetch_add(1, std::memory_order_relaxed);
             file.id = fid;
             local_file_ids.push_back(fid);
+            file.name.offset += base;
             tree.files.push_back(std::move(file));
         }
         for (auto& error : local_errors)
@@ -166,6 +188,8 @@ void Scanner::scan_directory(DirectoryId id)
             tree.directories[id].files.push_back(fid);
         }
     }
+
+    local_arena.clear();
 
     // a writes before this should be visible since we use this to determine if we are done scanning
     active_tasks.fetch_sub(1, std::memory_order_acq_rel);

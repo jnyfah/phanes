@@ -71,6 +71,7 @@ struct Acc
     std::array<bool, 3> has{};
     int arrived = 0;
     int submitted = 0;
+    std::size_t handle = 0;
 };
 
 struct Active
@@ -78,6 +79,7 @@ struct Active
     FileId id;
     std::uint64_t size;
     std::uint64_t offset;
+    std::size_t handle;
     PhanesHashState state;
 };
 
@@ -107,11 +109,23 @@ auto prefilter_group(Ring& ring,
     // queue every applicable region of one file
     auto submit_file = [&](size_t fi)
     {
-        const auto& path = tree.files[group.files[fi]].path;
+        const FileNode& f = tree.files[group.files[fi]];
+        std::string_view leaf{tree.file_names.data() + f.name.offset, f.name.len};
+        const std::filesystem::path path = tree.directories[f.parent].path / std::string(leaf);
+
+        // open once; the up-to-three region reads share this handle
+        auto fh = ring.open(path);
+        if (!fh)
+        {
+            acc[fi].submitted = 0;
+            return;
+        }
+        acc[fi].handle = *fh;
+
         int n = 0;
         auto add = [&](int64_t off, int r)
         {
-            if (auto tag = ring.submit(path, SAMPLE, off); tag)
+            if (auto tag = ring.submit(*fh, SAMPLE, off); tag)
             {
                 if (*tag >= meta.size())
                 {
@@ -128,6 +142,11 @@ auto prefilter_group(Ring& ring,
             add(static_cast<int64_t>(file_size) - static_cast<int64_t>(SAMPLE), 2); // back
         acc[fi].submitted = n;
         in_flight += n;
+
+        if (n == 0)
+        {
+            ring.close_file(*fh);
+        }
     };
 
     // submit all regions
@@ -172,7 +191,7 @@ auto prefilter_group(Ring& ring,
                 result[phanes_hash_digest(state)].push_back(group.files[fid]);
             }
 
-            // release this file's slots and pull in more work
+            // release this file's slots, close its handle, and pull in more work
             for (size_t r = 0; r < a.has.size(); ++r)
             {
                 if (a.has[r])
@@ -181,6 +200,7 @@ auto prefilter_group(Ring& ring,
                     in_flight--;
                 }
             }
+            ring.close_file(a.handle);
             pump();
         }
     }
@@ -223,12 +243,22 @@ auto hash_file(Ring& ring, const HashMap& by_sample, PhanesHashState& state, con
     {
         // initial submit for all files that can fit into W
         FileId id = worklist[next_file++];
+
+        const FileNode& f = tree.files[id];
+        std::string_view leaf{tree.file_names.data() + f.name.offset, f.name.len};
+        const std::filesystem::path path = tree.directories[f.parent].path / std::string(leaf);
+
+        auto fh = ring.open(path);
+        if (!fh)
+        {
+            continue; // can't open, skip this file
+        }
+
         size_t index = active.size();
-        active.push_back({id, tree.files[id].size, 0, {}});
+        active.push_back({id, tree.files[id].size, 0, *fh, {}});
         phanes_hash_reset(active[index].state);
 
-        const auto& path = tree.files[id].path;
-        if (auto t = ring.submit(path, CHUNK, 0); t)
+        if (auto t = ring.submit(*fh, CHUNK, 0); t)
         {
             if (*t >= tag_to_active.size())
             {
@@ -236,6 +266,11 @@ auto hash_file(Ring& ring, const HashMap& by_sample, PhanesHashState& state, con
             }
             tag_to_active[*t] = index;
             in_flight++;
+        }
+        else
+        {
+            ring.close_file(*fh);
+            active.pop_back(); // submit failed; undo the slot
         }
     }
 
@@ -251,9 +286,10 @@ auto hash_file(Ring& ring, const HashMap& by_sample, PhanesHashState& state, con
 
         auto index = tag_to_active[r->tag];
 
-        // read error: drop this chunk, recycle its slot
+        // read error: drop this chunk and close the file (only one chunk per file is in flight)
         if (r->res < 0)
         {
+            ring.close_file(active[index].handle);
             ring.release(r->tag);
             continue;
         }
@@ -264,9 +300,8 @@ auto hash_file(Ring& ring, const HashMap& by_sample, PhanesHashState& state, con
 
         if (active[index].offset < active[index].size)
         {
-            // submit next chunk
-            const auto& path = tree.files[active[index].id].path;
-            if (auto t = ring.submit(path, CHUNK, active[index].offset); t)
+            // submit next chunk against the same open handle
+            if (auto t = ring.submit(active[index].handle, CHUNK, active[index].offset); t)
             {
                 if (*t >= tag_to_active.size())
                 {
@@ -275,31 +310,48 @@ auto hash_file(Ring& ring, const HashMap& by_sample, PhanesHashState& state, con
                 tag_to_active[*t] = index;
                 in_flight++;
             }
+            else
+            {
+                ring.close_file(active[index].handle); // couldn't queue next chunk; abandon
+            }
         }
         else
         {
             // file done
             Hash h = phanes_hash_digest(active[index].state);
             result[h].push_back(active[index].id);
+            ring.close_file(active[index].handle);
 
             // reuse this finished slot for the next waiting file
             if (next_file < worklist.size())
             {
                 FileId id = worklist[next_file++];
-                active[index].id = id;
-                active[index].size = tree.files[id].size;
-                active[index].offset = 0;
-                phanes_hash_reset(active[index].state);
 
-                const auto& path = tree.files[id].path;
-                if (auto t = ring.submit(path, CHUNK, 0); t)
+                const FileNode& f = tree.files[id];
+                std::string_view leaf{tree.file_names.data() + f.name.offset, f.name.len};
+                const std::filesystem::path path = tree.directories[f.parent].path / std::string(leaf);
+
+                if (auto fh = ring.open(path); fh)
                 {
-                    if (*t >= tag_to_active.size())
+                    active[index].id = id;
+                    active[index].size = tree.files[id].size;
+                    active[index].offset = 0;
+                    active[index].handle = *fh;
+                    phanes_hash_reset(active[index].state);
+
+                    if (auto t = ring.submit(*fh, CHUNK, 0); t)
                     {
-                        tag_to_active.resize(*t + 1);
+                        if (*t >= tag_to_active.size())
+                        {
+                            tag_to_active.resize(*t + 1);
+                        }
+                        tag_to_active[*t] = index;
+                        in_flight++;
                     }
-                    tag_to_active[*t] = index;
-                    in_flight++;
+                    else
+                    {
+                        ring.close_file(*fh);
+                    }
                 }
             }
         }
@@ -313,9 +365,15 @@ std::generator<DuplicateGroup> group_files_by_size(const DirectoryTree& tree)
 {
     // readable files
     std::vector<FileId> ids;
-    for (const auto file : tree.files)
+    for (const auto& file : tree.files)
     {
-        if (file.readable && !file.is_symlink && file.size > 0 && !is_cloud_placeholder(file.path))
+        if (!file.readable || file.is_symlink || file.size == 0)
+        {
+            continue;
+        }
+        std::string_view leaf{tree.file_names.data() + file.name.offset, file.name.len};
+        const std::filesystem::path path = tree.directories[file.parent].path / std::string(leaf);
+        if (!is_cloud_placeholder(path))
         {
             ids.push_back(file.id);
         }

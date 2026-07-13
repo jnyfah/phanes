@@ -40,7 +40,9 @@ void create_fixture(const fs::path& root,
     for (int g = 0; g < num_groups; ++g)
     {
         for (std::size_t i = 0; i < file_size; ++i)
+        {
             buf[i] = static_cast<char>((g * 7 + i) & 0xFF);
+        }
 
         for (int c = 0; c < copies_per_group; ++c)
         {
@@ -49,11 +51,13 @@ void create_fixture(const fs::path& root,
         }
     }
 
-    // unique files: same size but distinct content — stage 1 should eliminate them
+    // unique files: same size but distinct content
     for (int u = 0; u < num_unique; ++u)
     {
         for (std::size_t i = 0; i < file_size; ++i)
+        {
             buf[i] = static_cast<char>((num_groups * 7 + u * 13 + i) & 0xFF);
+        }
         std::ofstream f(root / std::format("unique{}.bin", u), std::ios::binary);
         f.write(buf.data(), static_cast<std::streamsize>(file_size));
     }
@@ -81,8 +85,12 @@ static void BM_Duplicates_ThreadScaling(benchmark::State& state)
     const int64_t total_bytes = total_files * static_cast<int64_t>(file_size);
 
     for (auto _ : state)
+    {
         for (auto&& g : compute_duplicate_groups(tree, num_threads))
+        {
             benchmark::DoNotOptimize(g);
+        }
+    }
 
     state.SetItemsProcessed(state.iterations() * total_files);
     state.SetBytesProcessed(state.iterations() * total_bytes);
@@ -110,7 +118,9 @@ static void BM_Duplicates_FileSizeScaling(benchmark::State& state)
     const int64_t total_bytes = groups * copies * static_cast<int64_t>(file_size);
 
     for (auto _ : state)
+    {
         benchmark::DoNotOptimize(compute_duplicate_groups(tree, 0)); // 0 = hw_concurrency
+    }
 
     state.SetBytesProcessed(state.iterations() * total_bytes);
     state.SetLabel(std::format("{}KB/file", file_size / 1024));
@@ -138,7 +148,7 @@ static void BM_Duplicates_FilterEffectiveness(benchmark::State& state)
 
     constexpr int groups = 5;
     constexpr int copies = 4;
-    constexpr std::size_t file_size = 256 * 1024; // 256KB — large enough to make full reads expensive
+    constexpr std::size_t file_size = 256 * 1024;
 
     create_fixture(root, groups, copies, file_size, num_unique);
     auto tree = build_tree(root);
@@ -146,17 +156,20 @@ static void BM_Duplicates_FilterEffectiveness(benchmark::State& state)
     const int total_files = groups * copies + num_unique;
 
     for (auto _ : state)
+    {
         benchmark::DoNotOptimize(compute_duplicate_groups(tree, 0));
+    }
 
     state.SetItemsProcessed(state.iterations() * total_files);
     state.SetLabel(std::format("{} unique / {} total", num_unique, total_files));
 
     fs::remove_all(root);
 }
+
 BENCHMARK(BM_Duplicates_FilterEffectiveness)
-    ->Arg(0) // baseline: all files are duplicates, nothing for filter to prune
+    ->Arg(0)
     ->Arg(10)
     ->Arg(50)
-    ->Arg(100) // 100 unique files: filter should eliminate them cheaply at stage 1
+    ->Arg(100)
     ->Arg(500)
     ->Unit(benchmark::kMillisecond);

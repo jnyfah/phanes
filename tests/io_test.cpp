@@ -204,6 +204,85 @@ TEST(PhanesIoRing, StreamFileInChunksReassembles)
     EXPECT_EQ(got, content);
 }
 
+TEST(PhanesIoRing, OpenMissingFileFails)
+{
+    TempDir dir;
+    MAKE_RING_OR_SKIP(ring);
+
+    auto fh = ring.open(dir.path / "does_not_exist");
+    EXPECT_FALSE(fh.has_value());
+}
+
+TEST(PhanesIoRing, HandleStreamsChunksAndReleaseKeepsFdOpen)
+{
+    // open once, read the file in chunks against the handle, releasing each slot.
+    // release must NOT close the shared fd — if it did, the second chunk would fail.
+    TempDir dir;
+    const std::string content = make_content(10000, 0x55);
+    const auto p = dir.write("h.bin", content);
+
+    MAKE_RING_OR_SKIP(ring);
+
+    auto fh = ring.open(p);
+    ASSERT_TRUE(fh.has_value());
+
+    constexpr std::size_t CHUNK = 4096;
+    std::string got;
+    std::size_t offset = 0;
+    while (offset < content.size())
+    {
+        auto tag = ring.submit(*fh, CHUNK, static_cast<std::int64_t>(offset));
+        ASSERT_TRUE(tag.has_value());
+
+        auto res = ring.next();
+        ASSERT_TRUE(res.has_value());
+        ASSERT_GT(res->res, 0);
+        got.append(first(ring.data(res->tag), res->res));
+        ring.release(res->tag); // shared fd stays open
+        offset += static_cast<std::size_t>(res->res);
+    }
+    ring.close_file(*fh);
+    EXPECT_EQ(got, content);
+}
+
+TEST(PhanesIoRing, ManyOpenHandlesInterleaved)
+{
+    // several files open at once, one read each, completions correlated by tag —
+    // the hash_file window pattern.
+    TempDir dir;
+    constexpr int N = 24;
+    std::unordered_map<std::size_t, std::string> expected; // tag -> content
+
+    MAKE_RING_OR_SKIP(ring);
+
+    std::vector<std::size_t> handles;
+    for (int i = 0; i < N; ++i)
+    {
+        const auto content = make_content(300 + static_cast<std::size_t>(i) * 11, 0x2000ULL + i);
+        const auto p = dir.write(std::format("h{}.bin", i), content);
+        auto fh = ring.open(p);
+        ASSERT_TRUE(fh.has_value());
+        handles.push_back(*fh);
+        auto tag = ring.submit(*fh, content.size(), 0);
+        ASSERT_TRUE(tag.has_value());
+        expected[*tag] = content;
+    }
+
+    for (int seen = 0; seen < N; ++seen)
+    {
+        auto res = ring.next();
+        ASSERT_TRUE(res.has_value());
+        const auto it = expected.find(res->tag);
+        ASSERT_NE(it, expected.end());
+        EXPECT_EQ(first(ring.data(res->tag), res->res), it->second);
+        ring.release(res->tag);
+    }
+    for (auto h : handles)
+    {
+        ring.close_file(h);
+    }
+}
+
 TEST(PhanesIoRing, ReleaseRecyclesSlotAndResetKeepsRingUsable)
 {
     TempDir dir;

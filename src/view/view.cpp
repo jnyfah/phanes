@@ -106,7 +106,8 @@ void print_summary(std::ostream& os, const SummaryReport& report, const Director
     if (report.largest_file)
     {
         const auto& file = tree.files[*report.largest_file];
-        std::print(os, "{:<18}: {} ({})\n", "Largest File", file.path.filename().string(), format_size(file.size));
+        std::string_view name(tree.file_names.data() + file.name.offset, file.name.len);
+        std::print(os, "{:<18}: {} ({})\n", "Largest File", name, format_size(file.size));
     }
     else
     {
@@ -129,11 +130,10 @@ void print_largest_files(std::ostream& os, const std::vector<FileId>& files, con
     for (const auto file_id : files)
     {
         const auto& file = tree.files[file_id];
-        std::print(os,
-                   "{:<40} {:>12}  {}\n",
-                   file.path.filename().string(),
-                   format_size(file.size),
-                   file.path.parent_path().string());
+        auto dirid = file.parent;
+        auto parent = tree.directories[dirid].path;
+        std::string_view name(tree.file_names.data() + file.name.offset, file.name.len);
+        std::print(os, "{:<40} {:>12}  {}\n", name, format_size(file.size), parent.string());
     }
 
     std::println(os);
@@ -186,11 +186,10 @@ void print_symlinks(std::ostream& os, const std::vector<FileId>& files, const Di
     for (const auto file_id : files)
     {
         const auto& file = tree.files[file_id];
-        std::print(os,
-                   "{:<40} {:>12}  {}\n",
-                   file.path.filename().string(),
-                   format_size(file.size),
-                   file.path.parent_path().string());
+        auto dirid = file.parent;
+        auto parent = tree.directories[dirid].path;
+        std::string_view name(tree.file_names.data() + file.name.offset, file.name.len);
+        std::print(os, "{:<40} {:>12}  {}\n", name, format_size(file.size), parent.string());
     }
 
     std::println(os);
@@ -211,11 +210,14 @@ void print_recent_files(std::ostream& os,
     for (const auto file_id : files)
     {
         const auto& file = tree.files[file_id];
+        auto dirid = file.parent;
+        auto parent = tree.directories[dirid].path;
+        std::string_view name(tree.file_names.data() + file.name.offset, file.name.len);
         std::print(os,
                    "{:<35} {:>12} {:<20} {:>12}\n",
-                   file.path.filename().string(),
+                   name,
                    format_size(file.size),
-                   file.path.parent_path().string(),
+                   parent.string(),
                    format_duration(now - file.modified) + " ago");
     }
 
@@ -361,7 +363,8 @@ void print_duplicates(std::ostream& os, const std::vector<DuplicateGroup>& group
         std::println(os, "Group {} - {} copies - {} each", i + 1, group.files.size(), format_size(group.size));
         for (FileId id : group.files)
         {
-            std::println(os, "  {}", tree.files[id].path.string());
+            std::string_view name(tree.file_names.data() + tree.files[id].name.offset, tree.files[id].name.len);
+            std::println(os, "  {}", name);
         }
         std::println(os);
     }
@@ -372,7 +375,8 @@ void print_duplicate_group(std::ostream& os, const DuplicateGroup& group, const 
     std::println(os, "Group {} - {} copies - {} each", index, group.files.size(), format_size(group.size));
     for (FileId id : group.files)
     {
-        std::println(os, "  {}", tree.files[id].path.string());
+        std::string_view name(tree.file_names.data() + tree.files[id].name.offset, tree.files[id].name.len);
+        std::println(os, "  {}", name);
     }
     std::println(os);
 }

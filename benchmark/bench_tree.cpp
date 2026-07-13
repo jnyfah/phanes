@@ -83,7 +83,9 @@ make_synthetic_tree(std::size_t num_dirs, std::size_t files_per_dir, std::size_t
             FileNode file{};
             file.id = fid;
             file.parent = did;
-            file.path = dir.path / std::format("file{}{}", f, ext);
+            const auto leaf = std::format("file{}{}", f, ext);
+            file.name = {static_cast<std::uint32_t>(tree.file_names.size()), static_cast<std::uint32_t>(leaf.size())};
+            tree.file_names.insert(tree.file_names.end(), leaf.begin(), leaf.end());
             file.size = static_cast<std::uintmax_t>((d + 1) * (f + 1) * 1024);
             file.modified = (f % 5 == 0) ? old_ts : now;
             file.readable = true;
@@ -125,7 +127,9 @@ static void BM_FileStats(benchmark::State& state)
     auto tree = make_synthetic_tree(static_cast<std::size_t>(state.range(0)), static_cast<std::size_t>(state.range(1)));
 
     for (auto _ : state)
+    {
         benchmark::DoNotOptimize(compute_file_stats(tree));
+    }
 
     state.SetItemsProcessed(state.iterations() * static_cast<int64_t>(tree.files.size()));
 }
@@ -136,7 +140,9 @@ static void BM_DirectoryMetrics(benchmark::State& state)
     auto tree = make_synthetic_tree(static_cast<std::size_t>(state.range(0)), static_cast<std::size_t>(state.range(1)));
 
     for (auto _ : state)
+    {
         benchmark::DoNotOptimize(compute_directory_metrics(tree));
+    }
 
     state.SetItemsProcessed(state.iterations() * static_cast<int64_t>(tree.directories.size()));
 }
@@ -149,7 +155,9 @@ static void BM_EmptyDirs(benchmark::State& state)
     auto tree = make_synthetic_tree(num_dirs, 20, num_empty);
 
     for (auto _ : state)
+    {
         benchmark::DoNotOptimize(compute_empty_directories(tree));
+    }
 
     state.SetItemsProcessed(state.iterations() * static_cast<int64_t>(tree.directories.size()));
 }
@@ -161,7 +169,9 @@ static void BM_LargestNFiles(benchmark::State& state)
     const auto n = static_cast<std::size_t>(state.range(0));
 
     for (auto _ : state)
+    {
         benchmark::DoNotOptimize(compute_largest_N_Files(tree, n));
+    }
 }
 BENCHMARK(BM_LargestNFiles)->Arg(10)->Arg(50)->Arg(200)->Arg(500)->Unit(benchmark::kMicrosecond);
 
@@ -172,7 +182,9 @@ static void BM_LargestNDirs(benchmark::State& state)
     const auto n = static_cast<std::size_t>(state.range(0));
 
     for (auto _ : state)
+    {
         benchmark::DoNotOptimize(compute_largest_N_Directories(tree, metrics, n));
+    }
 }
 BENCHMARK(BM_LargestNDirs)->Arg(10)->Arg(50)->Arg(200)->Arg(500)->Unit(benchmark::kMicrosecond);
 
@@ -181,7 +193,9 @@ static void BM_ExtensionStats(benchmark::State& state)
     auto tree = make_synthetic_tree(static_cast<std::size_t>(state.range(0)), 50);
 
     for (auto _ : state)
+    {
         benchmark::DoNotOptimize(compute_extension_stats(tree));
+    }
 
     state.SetItemsProcessed(state.iterations() * static_cast<int64_t>(tree.files.size()));
 }
@@ -193,7 +207,9 @@ static void BM_RecentFiles(benchmark::State& state)
     const auto window = std::chrono::seconds{60LL * 60 * 24 * 7};
 
     for (auto _ : state)
+    {
         benchmark::DoNotOptimize(compute_recent_files(tree, window));
+    }
 
     state.SetItemsProcessed(state.iterations() * static_cast<int64_t>(tree.files.size()));
 }
@@ -205,7 +221,9 @@ static void BM_DirectoryStats(benchmark::State& state)
     auto metrics = compute_directory_metrics(tree);
 
     for (auto _ : state)
+    {
         benchmark::DoNotOptimize(compute_directory_stats(tree, metrics));
+    }
 }
 BENCHMARK(BM_DirectoryStats)->Arg(50)->Arg(200)->Arg(500)->Unit(benchmark::kMicrosecond);
 
@@ -219,7 +237,9 @@ static void BM_Summary(benchmark::State& state)
     auto fstats = compute_file_stats(tree);
 
     for (auto _ : state)
+    {
         benchmark::DoNotOptimize(compute_summary(tree, metrics, empty.size(), fstats));
+    }
 }
 BENCHMARK(BM_Summary)->Arg(50)->Arg(200)->Arg(500)->Unit(benchmark::kMicrosecond);
 
@@ -235,7 +255,9 @@ static void create_flat_tree(const fs::path& root, int dirs, int files)
         auto dir = root / std::format("d{}", d);
         fs::create_directories(dir);
         for (int f = 0; f < files; ++f)
+        {
             std::ofstream{dir / std::format("f{}.txt", f)} << 'x';
+        }
     }
 }
 
@@ -249,7 +271,9 @@ static void create_nested_tree(const fs::path& root, int l1, int l2_per_l1, int 
             auto dir = root / std::format("l1_{}", i) / std::format("l2_{}", j);
             fs::create_directories(dir);
             for (int f = 0; f < files; ++f)
+            {
                 std::ofstream{dir / std::format("f{}.txt", f)} << 'x';
+            }
         }
     }
 }
@@ -266,7 +290,9 @@ static void BM_BuildTree_ThreadOverhead(benchmark::State& state)
     create_flat_tree(root, dirs, 1);
 
     for (auto _ : state)
+    {
         benchmark::DoNotOptimize(build_tree(root));
+    }
 
     state.SetItemsProcessed(state.iterations() * dirs);
 
@@ -283,7 +309,9 @@ static void BM_BuildTree_Granularity(benchmark::State& state)
     create_flat_tree(root, dirs, files);
 
     for (auto _ : state)
+    {
         benchmark::DoNotOptimize(build_tree(root));
+    }
 
     state.SetItemsProcessed(state.iterations() * static_cast<int64_t>(dirs) * files);
     state.SetLabel(std::format("dirs={} files={}", dirs, files));
@@ -304,7 +332,9 @@ static void BM_BuildTree_Flat(benchmark::State& state)
     create_flat_tree(root, 100, 100);
 
     for (auto _ : state)
+    {
         benchmark::DoNotOptimize(build_tree(root));
+    }
 
     state.SetItemsProcessed(state.iterations() * 10000);
 
@@ -319,7 +349,9 @@ static void BM_BuildTree_Nested(benchmark::State& state)
     create_nested_tree(root, 10, 10, 100);
 
     for (auto _ : state)
+    {
         benchmark::DoNotOptimize(build_tree(root));
+    }
 
     state.SetItemsProcessed(state.iterations() * 10000);
 
@@ -334,7 +366,9 @@ static void BM_BuildTree_Balanced(benchmark::State& state)
     create_flat_tree(root, 100, 100);
 
     for (auto _ : state)
+    {
         benchmark::DoNotOptimize(build_tree(root));
+    }
 
     state.SetItemsProcessed(state.iterations() * 10000);
 
@@ -349,18 +383,24 @@ static void BM_BuildTree_Skewed(benchmark::State& state)
     auto heavy = root / "heavy";
     fs::create_directories(heavy);
     for (int f = 0; f < 800; ++f)
+    {
         std::ofstream{heavy / std::format("f{}.txt", f)} << 'x';
+    }
 
     for (int d = 0; d < 100; ++d)
     {
         auto dir = root / std::format("light_{}", d);
         fs::create_directories(dir);
         for (int f = 0; f < 2; ++f)
+        {
             std::ofstream{dir / std::format("f{}.txt", f)} << 'x';
+        }
     }
 
     for (auto _ : state)
+    {
         benchmark::DoNotOptimize(build_tree(root));
+    }
 
     state.SetItemsProcessed(state.iterations() * 1000); // 800 heavy + 200 light
 
@@ -376,7 +416,9 @@ static void BM_BuildTree_ThreadScaling(benchmark::State& state)
     create_flat_tree(root, 200, 50);
 
     for (auto _ : state)
+    {
         benchmark::DoNotOptimize(build_tree(root, num_threads));
+    }
 
     state.SetItemsProcessed(state.iterations() * 10000);
     state.SetLabel(std::format("{} thread(s)", num_threads));
