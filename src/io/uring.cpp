@@ -242,7 +242,7 @@ export class Ring
                 }
                 return std::unexpected(ErrorKind::IOError);
             }
-            pending = 0;
+            pending -= ret;
         }
 
         auto* cqe = &reinterpret_cast<io_uring_cqe*>(cring.cqes)[head & *cring.mask];
@@ -263,7 +263,7 @@ export class Ring
             return std::unexpected(ErrorKind::IOError);
         }
 
-        // size of ring = size of elements before array + (no of array elements* size of array type)
+        // size of each ring = byte offset to its last field + (element count * element size)
         sring_size = param.sq_off.array + (param.sq_entries * sizeof(unsigned));
         cring_size = param.cq_off.cqes + (param.cq_entries * sizeof(io_uring_cqe));
 
