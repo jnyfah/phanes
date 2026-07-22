@@ -9,10 +9,12 @@ module;
 #include <expected>
 #include <fcntl.h>
 #include <filesystem>
+#include <limits>
 #include <linux/io_uring.h>
 #include <sys/mman.h>
 #include <sys/syscall.h>
 #include <unistd.h>
+#include <utility>
 #include <vector>
 
 export module phanes_io;
@@ -31,21 +33,21 @@ static auto io_uring_enter(int ring_fd, unsigned to_submit, unsigned min_complet
 
 struct SqRing
 {
-    __u32* head;
-    __u32* tail;
-    __u32* mask;
-    __u32* entries;
-    __u32* flags;
-    __u32* array;
+    __u32* head{};
+    __u32* tail{};
+    __u32* mask{};
+    __u32* entries{};
+    __u32* flags{};
+    __u32* array{};
 };
 
 struct CqRing
 {
-    __u32* head;
-    __u32* tail;
-    __u32* mask;
-    __u32* entries;
-    void* cqes;
+    __u32* head{};
+    __u32* tail{};
+    __u32* mask{};
+    __u32* entries{};
+    void* cqes{};
 };
 
 export struct Data
@@ -68,67 +70,47 @@ export class Ring
     Ring(const Ring&) = delete;
     Ring& operator=(const Ring&) = delete;
 
-    Ring(Ring&&) noexcept = default;
-    Ring& operator=(Ring&&) noexcept = default;
+    Ring(Ring&& other) noexcept { adopt(other); }
 
-    ~Ring()
+    Ring& operator=(Ring&& other) noexcept
     {
-        if (ring >= 0)
+        if (this != &other)
         {
-            ::close(ring);
+            teardown();
+            adopt(other);
         }
-
-        if (cq_ptr && cq_ptr != sq_ptr)
-        {
-            ::munmap(cq_ptr, cring_size);
-        }
-
-        if (sq_ptr)
-        {
-            ::munmap(sq_ptr, sring_size);
-        }
-
-        if (sqe)
-        {
-            ::munmap(sqe, sqes_sz);
-        }
-
-        for (const auto& data : buffer)
-        {
-            if (data.fd >= 0)
-            {
-                ::close(data.fd);
-            }
-        }
-
-        for (int fd : files)
-        {
-            if (fd >= 0)
-            {
-                ::close(fd);
-            }
-        }
+        return *this;
     }
+
+    ~Ring() { teardown(); }
 
     auto data(size_t tag) const -> const std::vector<std::byte>& { return buffer[tag].buf; }
 
     void release(size_t tag)
     {
+        if (tag >= buffer.size())
+        {
+            return;
+        }
         if (buffer[tag].fd >= 0)
         {
             ::close(buffer[tag].fd);
+            buffer[tag].fd = -1;
         }
-        buffer[tag].fd = -1;
         free_slots.push_back(tag);
     }
 
     void reset()
     {
-        for (const auto& d : buffer)
+
+        drain();
+
+        for (auto& d : buffer)
         {
             if (d.fd >= 0)
             {
                 ::close(d.fd);
+                d.fd = -1;
             }
         }
         for (int fd : files)
@@ -138,11 +120,13 @@ export class Ring
                 ::close(fd);
             }
         }
-        buffer.clear();
         free_slots.clear();
+        for (std::size_t i = 0; i < buffer.size(); ++i)
+        {
+            free_slots.push_back(i);
+        }
         files.clear();
         free_files.clear();
-        pending = 0;
     }
 
     // open a file once so many reads can be submitted against it via submit(handle, ...).
@@ -172,12 +156,13 @@ export class Ring
 
     void close_file(size_t fh)
     {
-        if (files[fh] >= 0)
+        if (fh >= files.size() || files[fh] < 0)
         {
-            ::close(files[fh]);
-            files[fh] = -1;
-            free_files.push_back(fh);
+            return;
         }
+        ::close(files[fh]);
+        files[fh] = -1;
+        free_files.push_back(fh);
     }
 
     // single-shot: opens the file and submits one read; the slot owns the fd and closes it on release.
@@ -185,7 +170,7 @@ export class Ring
     {
         if (sq_full())
         {
-            return std::unexpected(ErrorKind::IOError);
+            return std::unexpected(ErrorKind::IOError); // backpressure, not a failure
         }
 
         // open the file
@@ -194,6 +179,8 @@ export class Ring
         {
             return std::unexpected(ErrorKind::FileError);
         }
+        ::posix_fadvise(fd, 0, 0, POSIX_FADV_SEQUENTIAL);
+
         size_t tag = alloc_slot(len);
         buffer[tag].fd = fd; // slot owns this fd
         queue_read(tag, fd, len, offset);
@@ -220,19 +207,34 @@ export class Ring
         for (;;)
         {
             // user does not own tail, so read with acquire
-            auto tail = std::atomic_ref<__u32>(*cring.tail).load(std::memory_order_acquire);
+            const auto tail = std::atomic_ref<__u32>(*cring.tail).load(std::memory_order_acquire);
 
-            // all completions are ready and there is nothing left to submit in io_uring_enter
-            // so leave the loop
-            if (head != tail && pending == 0)
+            if (head != tail)
             {
-                break;
+                // a completion is ready. push any queued SQEs to the kernel on the
+                // way past, but do not block for them.
+                if (pending > 0)
+                {
+                    int ret = io_uring_enter(ring, pending, 0, IORING_ENTER_GETEVENTS);
+                    if (ret >= 0)
+                    {
+                        pending -= static_cast<unsigned>(ret);
+                        inflight += static_cast<unsigned>(ret);
+                    }
+                    else if (errno != EINTR && errno != EAGAIN && errno != EBUSY)
+                    {
+                        return std::unexpected(ErrorKind::IOError);
+                    }
+                }
+                break; // leave the for loop
             }
 
-            // if the cqe is not empty, sumbit all queued sqe bu dont wait for results since there are pending results
-            // in the cqe already
-            unsigned min_complete = (head == tail) ? 1u : 0u;
-            int ret = io_uring_enter(ring, pending, min_complete, IORING_ENTER_GETEVENTS);
+            if (pending == 0 && inflight == 0)
+            {
+                return std::unexpected(ErrorKind::IOError);
+            }
+
+            int ret = io_uring_enter(ring, pending, 1, IORING_ENTER_GETEVENTS);
             if (ret < 0)
             {
                 // failure
@@ -242,17 +244,30 @@ export class Ring
                 }
                 return std::unexpected(ErrorKind::IOError);
             }
-            pending -= ret;
+            pending -= static_cast<unsigned>(ret);
+            inflight += static_cast<unsigned>(ret);
         }
 
-        auto* cqe = &reinterpret_cast<io_uring_cqe*>(cring.cqes)[head & *cring.mask];
-        auto tag = cqe->user_data;
-        auto res = cqe->res;
+        const auto* cqe = &reinterpret_cast<io_uring_cqe*>(cring.cqes)[head & *cring.mask];
+        const auto tag = cqe->user_data;
+        const auto res = cqe->res; // bytes read, or a negative errno
 
-        // release so kernel can see this update
+        --inflight;
+
         std::atomic_ref<__u32>(*cring.head).store(head + 1, std::memory_order_release);
 
-        return Result{tag, res};
+        return Result{static_cast<size_t>(tag), res};
+    }
+
+    void drain()
+    {
+        while (pending > 0 || inflight > 0)
+        {
+            if (!next())
+            {
+                break;
+            }
+        }
     }
 
     auto init(unsigned entries) -> std::expected<void, ErrorKind>
@@ -260,6 +275,7 @@ export class Ring
         ring = io_uring_setup(entries, &param);
         if (ring < 0)
         {
+            ring = -1;
             return std::unexpected(ErrorKind::IOError);
         }
 
@@ -274,13 +290,13 @@ export class Ring
             cring_size = sring_size;
         }
 
-        // set MMAP
-        sq_ptr = static_cast<std::byte*>(
-            ::mmap(nullptr, sring_size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_POPULATE, ring, IORING_OFF_SQ_RING));
-        if (sq_ptr == MAP_FAILED)
+        void* p =
+            ::mmap(nullptr, sring_size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_POPULATE, ring, IORING_OFF_SQ_RING);
+        if (p == MAP_FAILED)
         {
             return std::unexpected(ErrorKind::IOError);
         }
+        sq_ptr = static_cast<std::byte*>(p);
 
         if (param.features & IORING_FEAT_SINGLE_MMAP)
         {
@@ -288,24 +304,26 @@ export class Ring
         }
         else
         {
-            cq_ptr = static_cast<std::byte*>(::mmap(nullptr,
-                                                    cring_size,
-                                                    PROT_READ | PROT_WRITE,
-                                                    MAP_SHARED | MAP_POPULATE,
-                                                    ring,
-                                                    IORING_OFF_CQ_RING));
-            if (cq_ptr == MAP_FAILED)
+            p = ::mmap(nullptr,
+                       cring_size,
+                       PROT_READ | PROT_WRITE,
+                       MAP_SHARED | MAP_POPULATE,
+                       ring,
+                       IORING_OFF_CQ_RING);
+            if (p == MAP_FAILED)
+            {
                 return std::unexpected(ErrorKind::IOError);
+            }
+            cq_ptr = static_cast<std::byte*>(p);
         }
 
         sqes_sz = param.sq_entries * sizeof(io_uring_sqe);
-        sqe = static_cast<io_uring_sqe*>(
-            ::mmap(nullptr, sqes_sz, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_POPULATE, ring, IORING_OFF_SQES));
-
-        if (sqe == MAP_FAILED)
+        p = ::mmap(nullptr, sqes_sz, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_POPULATE, ring, IORING_OFF_SQES);
+        if (p == MAP_FAILED)
         {
             return std::unexpected(ErrorKind::IOError);
         }
+        sqe = static_cast<io_uring_sqe*>(p);
 
         // fill user data
         // address of shared memory + offset
@@ -318,6 +336,7 @@ export class Ring
 
         cring.head = reinterpret_cast<__u32*>(cq_ptr + param.cq_off.head);
         cring.tail = reinterpret_cast<__u32*>(cq_ptr + param.cq_off.tail);
+        cring.entries = reinterpret_cast<__u32*>(cq_ptr + param.cq_off.ring_entries);
         cring.mask = reinterpret_cast<__u32*>(cq_ptr + param.cq_off.ring_mask);
         cring.cqes = reinterpret_cast<io_uring_cqe*>(cq_ptr + param.cq_off.cqes);
 
@@ -327,7 +346,7 @@ export class Ring
   private:
     auto sq_full() const -> bool
     {
-        auto sq_head = std::atomic_ref<__u32>(*sring.head).load(std::memory_order_acquire);
+        const auto sq_head = std::atomic_ref<__u32>(*sring.head).load(std::memory_order_acquire);
         return (*sring.tail - sq_head) >= param.sq_entries;
     }
 
@@ -344,28 +363,102 @@ export class Ring
             tag = buffer.size();
             buffer.emplace_back();
         }
-        buffer[tag].buf.resize(len);
+        if (buffer[tag].buf.size() < len)
+        {
+            buffer[tag].buf.resize(len);
+        }
         return tag;
     }
 
     void queue_read(size_t tag, int fd, size_t len, int64_t offset)
     {
         auto tail = *sring.tail;
-        auto index = tail & *sring.mask;
+        const auto index = tail & *sring.mask;
 
-        auto sqentry = &sqe[index];
+        auto* sqentry = &sqe[index];
         std::memset(sqentry, 0, sizeof(*sqentry));
         sqentry->fd = fd;
         sqentry->opcode = IORING_OP_READ;
-        sqentry->len = len;
+        sqentry->len = static_cast<__u32>(len);
         sqentry->addr = reinterpret_cast<std::uint64_t>(buffer[tag].buf.data());
         sqentry->user_data = tag;
-        sqentry->off = offset;
+        sqentry->off = static_cast<__u64>(offset);
         sring.array[index] = index;
 
         // release so the kernel can observe the write
         std::atomic_ref<__u32>(*sring.tail).store(tail + 1, std::memory_order_release);
         pending++; // queued, but not yet submitted to the kernel
+    }
+
+    void adopt(Ring& other) noexcept
+    {
+        sring = std::exchange(other.sring, {});
+        cring = std::exchange(other.cring, {});
+        sring_size = std::exchange(other.sring_size, 0);
+        cring_size = std::exchange(other.cring_size, 0);
+        sqes_sz = std::exchange(other.sqes_sz, 0);
+        param = other.param;
+        sqe = std::exchange(other.sqe, nullptr);
+        ring = std::exchange(other.ring, -1);
+        sq_ptr = std::exchange(other.sq_ptr, nullptr);
+        cq_ptr = std::exchange(other.cq_ptr, nullptr);
+        pending = std::exchange(other.pending, 0);
+        inflight = std::exchange(other.inflight, 0);
+        buffer = std::move(other.buffer);
+        free_slots = std::move(other.free_slots);
+        files = std::move(other.files);
+        free_files = std::move(other.free_files);
+        other.buffer.clear();
+        other.files.clear();
+    }
+
+    void teardown() noexcept
+    {
+        if (ring >= 0)
+        {
+            drain();
+            ::close(ring);
+            ring = -1;
+        }
+
+        if (cq_ptr && cq_ptr != sq_ptr)
+        {
+            ::munmap(cq_ptr, cring_size);
+        }
+        cq_ptr = nullptr;
+
+        if (sq_ptr)
+        {
+            ::munmap(sq_ptr, sring_size);
+        }
+        sq_ptr = nullptr;
+
+        if (sqe)
+        {
+            ::munmap(sqe, sqes_sz);
+        }
+        sqe = nullptr;
+
+        for (const auto& d : buffer)
+        {
+            if (d.fd >= 0)
+            {
+                ::close(d.fd);
+            }
+        }
+        for (int fd : files)
+        {
+            if (fd >= 0)
+            {
+                ::close(fd);
+            }
+        }
+        buffer.clear();
+        files.clear();
+        free_slots.clear();
+        free_files.clear();
+        pending = 0;
+        inflight = 0;
     }
 
     SqRing sring{};
@@ -385,7 +478,8 @@ export class Ring
     std::byte* cq_ptr{nullptr};
 
     std::vector<size_t> free_slots; // indices ready to reuse
-    unsigned pending = 0; // SQEs queued but not yet handed to the kernel
+    unsigned pending = 0; // SQEs queued in the ring but not yet handed to the kernel
+    unsigned inflight = 0; // SQEs the kernel has accepted but not yet completed
 
     std::vector<int> files;
     std::vector<size_t> free_files;
