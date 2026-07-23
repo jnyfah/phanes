@@ -130,12 +130,7 @@ struct Corpus
     decltype(build_tree(fs::path{})) tree;
     int64_t bytes = 0;
 
-    Corpus(std::string_view stem,
-           int groups,
-           int copies,
-           std::size_t size,
-           int unique = 0,
-           std::size_t size_stride = 0)
+    Corpus(std::string_view stem, int groups, int copies, std::size_t size, int unique = 0, std::size_t size_stride = 0)
         : root(bench_root(stem))
     {
         bytes = create_fixture(root, groups, copies, size, unique, size_stride);
@@ -198,8 +193,13 @@ int main(int argc, char** argv)
     }
 
     // ---- File size scaling ----
-    for (std::size_t sz : {std::size_t{1024}, std::size_t{4096}, std::size_t{16384}, std::size_t{65536},
-                           std::size_t{262144}, std::size_t{1048576}, std::size_t{4194304}})
+    for (std::size_t sz : {std::size_t{1024},
+                           std::size_t{4096},
+                           std::size_t{16384},
+                           std::size_t{65536},
+                           std::size_t{262144},
+                           std::size_t{1048576},
+                           std::size_t{4194304}})
     {
         benchmark::RegisterBenchmark(std::format("FileSize/{}KB", sz / 1024),
                                      [sz](benchmark::State& st)
@@ -228,8 +228,7 @@ int main(int argc, char** argv)
                                              auto gen = compute_duplicate_groups(c.tree, 0);
                                              consume(gen);
                                          }
-                                         st.SetItemsProcessed(st.iterations() *
-                                                              static_cast<int64_t>(c.files.size()));
+                                         st.SetItemsProcessed(st.iterations() * static_cast<int64_t>(c.files.size()));
                                      })
             ->UseRealTime()
             ->Unit(benchmark::kMillisecond);
@@ -256,35 +255,34 @@ int main(int argc, char** argv)
         ->UseRealTime()
         ->Unit(benchmark::kMillisecond);
 
-    benchmark::RegisterBenchmark("PerFile/prefilter",
-                                 [](benchmark::State& st)
-                                 {
-                                     std::vector<char> buf(4096);
-                                     constexpr std::size_t fsz = 64 * 1024;
-                                     for (auto _ : st)
-                                     {
-                                         for (const auto& p : small_corpus.files)
-                                         {
-                                             int fd = ::open(p.c_str(), O_RDONLY);
-                                             if (fd < 0)
-                                             {
-                                                 continue;
-                                             }
-                                             const off_t offs[3] = {0, static_cast<off_t>(fsz / 2 - 2048),
-                                                                    static_cast<off_t>(fsz - 4096)};
-                                             for (off_t o : offs)
-                                             {
-                                                 auto n = ::pread(fd, buf.data(), buf.size(), o);
-                                                 benchmark::DoNotOptimize(n);
-                                             }
-                                             ::close(fd);
-                                         }
-                                     }
-                                     const auto n = st.iterations() *
-                                         static_cast<int64_t>(small_corpus.files.size());
-                                     st.SetItemsProcessed(n);
-                                     st.SetBytesProcessed(n * 3 * 4096);
-                                 })
+    benchmark::RegisterBenchmark(
+        "PerFile/prefilter",
+        [](benchmark::State& st)
+        {
+            std::vector<char> buf(4096);
+            constexpr std::size_t fsz = 64 * 1024;
+            for (auto _ : st)
+            {
+                for (const auto& p : small_corpus.files)
+                {
+                    int fd = ::open(p.c_str(), O_RDONLY);
+                    if (fd < 0)
+                    {
+                        continue;
+                    }
+                    const off_t offs[3] = {0, static_cast<off_t>(fsz / 2 - 2048), static_cast<off_t>(fsz - 4096)};
+                    for (off_t o : offs)
+                    {
+                        auto n = ::pread(fd, buf.data(), buf.size(), o);
+                        benchmark::DoNotOptimize(n);
+                    }
+                    ::close(fd);
+                }
+            }
+            const auto n = st.iterations() * static_cast<int64_t>(small_corpus.files.size());
+            st.SetItemsProcessed(n);
+            st.SetBytesProcessed(n * 3 * 4096);
+        })
         ->UseRealTime()
         ->Unit(benchmark::kMillisecond);
 
@@ -324,65 +322,63 @@ int main(int argc, char** argv)
         ->UseRealTime()
         ->Unit(benchmark::kMillisecond);
 
-
     for (unsigned depth : {1u, 4u, 16u, 64u, 256u})
     {
-        benchmark::RegisterBenchmark(
-            std::format("Ring/depth/{}", depth),
-            [depth](benchmark::State& st)
-            {
-                constexpr std::size_t chunk = 256 * 1024;
-                int64_t bytes = 0;
-                for (auto _ : st)
-                {
-                    evict(scan_corpus.files);
-                    const auto t0 = std::chrono::steady_clock::now();
+        benchmark::RegisterBenchmark(std::format("Ring/depth/{}", depth),
+                                     [depth](benchmark::State& st)
+                                     {
+                                         constexpr std::size_t chunk = 256 * 1024;
+                                         int64_t bytes = 0;
+                                         for (auto _ : st)
+                                         {
+                                             evict(scan_corpus.files);
+                                             const auto t0 = std::chrono::steady_clock::now();
 
-                    Ring ring;
-                    if (!ring.init(depth))
-                    {
-                        st.SkipWithError("ring init failed");
-                        break;
-                    }
+                                             Ring ring;
+                                             if (!ring.init(depth))
+                                             {
+                                                 st.SkipWithError("ring init failed");
+                                                 break;
+                                             }
 
-                    std::size_t next = 0;
-                    unsigned outstanding = 0;
-                    while (outstanding < depth && next < scan_corpus.files.size())
-                    {
-                        if (ring.submit(scan_corpus.files[next], chunk, 0))
-                        {
-                            ++outstanding;
-                        }
-                        ++next;
-                    }
-                    while (outstanding > 0)
-                    {
-                        auto r = ring.next();
-                        if (!r)
-                        {
-                            break;
-                        }
-                        if (r->res > 0)
-                        {
-                            bytes += r->res;
-                        }
-                        ring.release(r->tag);
-                        --outstanding;
-                        if (next < scan_corpus.files.size())
-                        {
-                            if (ring.submit(scan_corpus.files[next], chunk, 0))
-                            {
-                                ++outstanding;
-                            }
-                            ++next;
-                        }
-                    }
+                                             std::size_t next = 0;
+                                             unsigned outstanding = 0;
+                                             while (outstanding < depth && next < scan_corpus.files.size())
+                                             {
+                                                 if (ring.submit(scan_corpus.files[next], chunk, 0))
+                                                 {
+                                                     ++outstanding;
+                                                 }
+                                                 ++next;
+                                             }
+                                             while (outstanding > 0)
+                                             {
+                                                 auto r = ring.next();
+                                                 if (!r)
+                                                 {
+                                                     break;
+                                                 }
+                                                 if (r->res > 0)
+                                                 {
+                                                     bytes += r->res;
+                                                 }
+                                                 ring.release(r->tag);
+                                                 --outstanding;
+                                                 if (next < scan_corpus.files.size())
+                                                 {
+                                                     if (ring.submit(scan_corpus.files[next], chunk, 0))
+                                                     {
+                                                         ++outstanding;
+                                                     }
+                                                     ++next;
+                                                 }
+                                             }
 
-                    const auto t1 = std::chrono::steady_clock::now();
-                    st.SetIterationTime(std::chrono::duration<double>(t1 - t0).count());
-                }
-                st.SetBytesProcessed(bytes);
-            })
+                                             const auto t1 = std::chrono::steady_clock::now();
+                                             st.SetIterationTime(std::chrono::duration<double>(t1 - t0).count());
+                                         }
+                                         st.SetBytesProcessed(bytes);
+                                     })
             ->UseManualTime()
             ->Iterations(1)
             ->Repetitions(5)

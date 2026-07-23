@@ -426,4 +426,3 @@ static void BM_BuildTree_ThreadScaling(benchmark::State& state)
     fs::remove_all(root);
 }
 BENCHMARK(BM_BuildTree_ThreadScaling)->Arg(1)->Arg(2)->Arg(4)->Arg(8)->Arg(16)->Unit(benchmark::kMillisecond);
-
