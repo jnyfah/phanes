@@ -258,7 +258,9 @@ auto hash_file(Ring& ring, const HashMap& by_sample, PhanesHashState& state, con
         active.push_back({id, tree.files[id].size, 0, *fh, {}});
         phanes_hash_reset(active[index].state);
 
-        if (auto t = ring.submit(*fh, CHUNK, 0); t)
+        // clamp to file size: a small file must not claim a full CHUNK buffer
+        const auto len = static_cast<size_t>(std::min<std::uint64_t>(CHUNK, active[index].size));
+        if (auto t = ring.submit(*fh, len, 0); t)
         {
             if (*t >= tag_to_active.size())
             {
@@ -300,8 +302,10 @@ auto hash_file(Ring& ring, const HashMap& by_sample, PhanesHashState& state, con
 
         if (active[index].offset < active[index].size)
         {
-            // submit next chunk against the same open handle
-            if (auto t = ring.submit(active[index].handle, CHUNK, active[index].offset); t)
+            // submit next chunk against the same open handle, clamped to what remains
+            const auto len =
+                static_cast<size_t>(std::min<std::uint64_t>(CHUNK, active[index].size - active[index].offset));
+            if (auto t = ring.submit(active[index].handle, len, active[index].offset); t)
             {
                 if (*t >= tag_to_active.size())
                 {
@@ -339,7 +343,8 @@ auto hash_file(Ring& ring, const HashMap& by_sample, PhanesHashState& state, con
                     active[index].handle = *fh;
                     phanes_hash_reset(active[index].state);
 
-                    if (auto t = ring.submit(*fh, CHUNK, 0); t)
+                    const auto len = static_cast<size_t>(std::min<std::uint64_t>(CHUNK, active[index].size));
+                    if (auto t = ring.submit(*fh, len, 0); t)
                     {
                         if (*t >= tag_to_active.size())
                         {
@@ -404,7 +409,8 @@ std::generator<DuplicateGroup> compute_duplicate_groups(const DirectoryTree& tre
     }
 
     const std::size_t total = size_groups.size();
-    const std::size_t n_threads = std::jthread::hardware_concurrency();
+    const std::size_t hw = std::max(1u, std::jthread::hardware_concurrency());
+    const std::size_t n_threads = (num_threads == 0) ? hw : std::max(std::size_t{1}, num_threads);
 
     auto tasks_owner = std::make_unique<LockFreeDeque<std::size_t>>(1024, n_threads);
     auto& tasks = *tasks_owner;
