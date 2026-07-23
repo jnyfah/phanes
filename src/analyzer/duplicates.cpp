@@ -410,7 +410,7 @@ std::generator<DuplicateGroup> compute_duplicate_groups(const DirectoryTree& tre
 
     const std::size_t total = size_groups.size();
     const std::size_t hw = std::max(1u, std::jthread::hardware_concurrency());
-    const std::size_t n_threads = (num_threads == 0) ? hw * 2 : std::max(std::size_t{1}, num_threads);
+    const std::size_t n_threads = (num_threads == 0) ? hw: std::max(std::size_t{1}, num_threads);
 
     auto tasks_owner = std::make_unique<LockFreeDeque<std::size_t>>(1024, n_threads);
     auto& tasks = *tasks_owner;
