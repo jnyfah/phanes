@@ -110,8 +110,13 @@ auto prefilter_group(Ring& ring,
     auto submit_file = [&](size_t fi)
     {
         const FileNode& f = tree.files[group.files[fi]];
-        std::string_view leaf{tree.file_names.data() + f.name.offset, f.name.len};
-        const std::filesystem::path path = tree.directories[f.parent].path / std::string(leaf);
+        const std::filesystem::path path = file_path(tree, f);
+
+        if (is_cloud_placeholder(path))
+        {
+            acc[fi].submitted = 0;
+            return;
+        }
 
         // open once; the up-to-three region reads share this handle
         auto fh = ring.open(path);
@@ -178,7 +183,7 @@ auto prefilter_group(Ring& ring,
         // a file settles once all of its submitted reads are back
         if (a.arrived == a.submitted)
         {
-            if (a.submitted == static_cast<int>(expected)) // fully sampled -> hash in region order
+            if (a.submitted == static_cast<int>(expected))
             {
                 phanes_hash_reset(state);
                 for (size_t r = 0; r < a.has.size(); ++r)
@@ -245,8 +250,12 @@ auto hash_file(Ring& ring, const HashMap& by_sample, PhanesHashState& state, con
         FileId id = worklist[next_file++];
 
         const FileNode& f = tree.files[id];
-        std::string_view leaf{tree.file_names.data() + f.name.offset, f.name.len};
-        const std::filesystem::path path = tree.directories[f.parent].path / std::string(leaf);
+        const std::filesystem::path path = file_path(tree, f);
+
+        if (is_cloud_placeholder(path))
+        {
+            continue; // don't trigger a cloud download just to hash it
+        }
 
         auto fh = ring.open(path);
         if (!fh)
@@ -332,30 +341,32 @@ auto hash_file(Ring& ring, const HashMap& by_sample, PhanesHashState& state, con
                 FileId id = worklist[next_file++];
 
                 const FileNode& f = tree.files[id];
-                std::string_view leaf{tree.file_names.data() + f.name.offset, f.name.len};
-                const std::filesystem::path path = tree.directories[f.parent].path / std::string(leaf);
+                const std::filesystem::path path = file_path(tree, f);
 
-                if (auto fh = ring.open(path); fh)
+                if (!is_cloud_placeholder(path))
                 {
-                    active[index].id = id;
-                    active[index].size = tree.files[id].size;
-                    active[index].offset = 0;
-                    active[index].handle = *fh;
-                    phanes_hash_reset(active[index].state);
+                    if (auto fh = ring.open(path); fh)
+                    {
+                        active[index].id = id;
+                        active[index].size = tree.files[id].size;
+                        active[index].offset = 0;
+                        active[index].handle = *fh;
+                        phanes_hash_reset(active[index].state);
 
-                    const auto len = static_cast<size_t>(std::min<std::uint64_t>(CHUNK, active[index].size));
-                    if (auto t = ring.submit(*fh, len, 0); t)
-                    {
-                        if (*t >= tag_to_active.size())
+                        const auto len = static_cast<size_t>(std::min<std::uint64_t>(CHUNK, active[index].size));
+                        if (auto t = ring.submit(*fh, len, 0); t)
                         {
-                            tag_to_active.resize(*t + 1);
+                            if (*t >= tag_to_active.size())
+                            {
+                                tag_to_active.resize(*t + 1);
+                            }
+                            tag_to_active[*t] = index;
+                            in_flight++;
                         }
-                        tag_to_active[*t] = index;
-                        in_flight++;
-                    }
-                    else
-                    {
-                        ring.close_file(*fh);
+                        else
+                        {
+                            ring.close_file(*fh);
+                        }
                     }
                 }
             }
@@ -376,12 +387,7 @@ std::generator<DuplicateGroup> group_files_by_size(const DirectoryTree& tree)
         {
             continue;
         }
-        std::string_view leaf{tree.file_names.data() + file.name.offset, file.name.len};
-        const std::filesystem::path path = tree.directories[file.parent].path / std::string(leaf);
-        if (!is_cloud_placeholder(path))
-        {
-            ids.push_back(file.id);
-        }
+        ids.push_back(file.id);
     }
 
     // sort by size

@@ -29,6 +29,11 @@ fs::path make_unique_bench_path(std::string_view stem)
         std::format("{}_{}_{}", stem, now, std::hash<std::thread::id>{}(std::this_thread::get_id()));
 }
 
+fs::path::string_type to_name(std::string_view s)
+{
+    return fs::path::string_type(s.begin(), s.end());
+}
+
 } // namespace
 
 // ============================================================================
@@ -83,7 +88,7 @@ make_synthetic_tree(std::size_t num_dirs, std::size_t files_per_dir, std::size_t
             FileNode file{};
             file.id = fid;
             file.parent = did;
-            const auto leaf = std::format("file{}{}", f, ext);
+            const auto leaf = to_name(std::format("file{}{}", f, ext));
             file.name = {static_cast<std::uint32_t>(tree.file_names.size()), static_cast<std::uint32_t>(leaf.size())};
             tree.file_names.insert(tree.file_names.end(), leaf.begin(), leaf.end());
             file.size = static_cast<std::uintmax_t>((d + 1) * (f + 1) * 1024);

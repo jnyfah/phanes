@@ -102,8 +102,7 @@ std::vector<ExtensionStats> compute_extension_stats(const DirectoryTree& tree)
 
     for (const auto& file : tree.files)
     {
-        std::string name(tree.file_names.data() + file.name.offset, file.name.len);
-        auto ext = std::filesystem::path(name).extension().string();
+        auto ext = std::filesystem::path(name_view(tree, file)).extension().string();
         std::ranges::transform(ext, ext.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 
         auto& [count, size] = map[ext];

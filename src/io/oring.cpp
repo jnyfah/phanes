@@ -7,10 +7,13 @@ module;
 #include <ioringapi.h>
 // clang-format on
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <expected>
 #include <filesystem>
+#include <limits>
+#include <utility>
 #include <vector>
 
 export module phanes_io;
@@ -37,44 +40,66 @@ export class Ring
     Ring(const Ring&) = delete;
     Ring& operator=(const Ring&) = delete;
 
-    Ring(Ring&&) noexcept = default;
-    Ring& operator=(Ring&&) noexcept = default;
+    Ring(Ring&& other) noexcept { adopt(other); }
 
-    ~Ring()
+    Ring& operator=(Ring&& other) noexcept
     {
-        for (const auto& d : buffer)
+        if (this != &other)
         {
-            if (d.fd != INVALID_HANDLE_VALUE)
-            {
-                ::CloseHandle(d.fd);
-            }
+            teardown();
+            adopt(other);
         }
-        for (HANDLE fd : files)
-        {
-            if (fd != INVALID_HANDLE_VALUE)
-            {
-                ::CloseHandle(fd);
-            }
-        }
-        if (handle)
-        {
-            ::CloseIoRing(handle);
-        }
+        return *this;
     }
+
+    ~Ring() { teardown(); }
 
     auto init(unsigned entries) -> std::expected<void, ErrorKind>
     {
+        IORING_CAPABILITIES caps{};
+        HRESULT hr = ::QueryIoRingCapabilities(&caps);
+        if (FAILED(hr) || caps.MaxVersion == IORING_VERSION_INVALID)
+        {
+            return std::unexpected(ErrorKind::IOError);
+        }
+
+        const auto version = (std::min)(caps.MaxVersion, IORING_VERSION_3);
+        entries = (std::min)(entries, static_cast<unsigned>(caps.MaxSubmissionQueueSize));
+
         IORING_CREATE_FLAGS flags{};
         flags.Required = IORING_CREATE_REQUIRED_FLAGS_NONE;
         flags.Advisory = IORING_CREATE_ADVISORY_FLAGS_NONE;
 
-        // submission + completion queue both sized to entries
-        HRESULT hr = ::CreateIoRing(IORING_VERSION_3, flags, entries, entries, &handle);
+        hr = ::CreateIoRing(version, flags, entries, entries * 2, &handle);
         if (FAILED(hr))
         {
+            handle = nullptr;
             return std::unexpected(ErrorKind::IOError);
         }
-        sq_entries = entries;
+
+        IORING_INFO info{};
+        hr = ::GetIoRingInfo(handle, &info);
+        if (FAILED(hr))
+        {
+            ::CloseIoRing(handle);
+            handle = nullptr;
+            return std::unexpected(ErrorKind::IOError);
+        }
+
+        sq_entries = info.SubmissionQueueSize;
+        cq_entries = info.CompletionQueueSize;
+
+        completion_event = ::CreateEventW(nullptr, FALSE, FALSE, nullptr);
+        if (completion_event)
+        {
+            have_event = SUCCEEDED(::SetIoRingCompletionEvent(handle, completion_event));
+            if (!have_event)
+            {
+                ::CloseHandle(completion_event);
+                completion_event = nullptr;
+            }
+        }
+
         return {};
     }
 
@@ -82,21 +107,28 @@ export class Ring
 
     void release(size_t tag)
     {
+        if (tag >= buffer.size())
+        {
+            return;
+        }
         if (buffer[tag].fd != INVALID_HANDLE_VALUE)
         {
             ::CloseHandle(buffer[tag].fd);
+            buffer[tag].fd = INVALID_HANDLE_VALUE;
         }
-        buffer[tag].fd = INVALID_HANDLE_VALUE;
         free_slots.push_back(tag);
     }
 
     void reset()
     {
-        for (const auto& d : buffer)
+        drain();
+
+        for (auto& d : buffer)
         {
             if (d.fd != INVALID_HANDLE_VALUE)
             {
                 ::CloseHandle(d.fd);
+                d.fd = INVALID_HANDLE_VALUE;
             }
         }
         for (HANDLE fd : files)
@@ -106,11 +138,13 @@ export class Ring
                 ::CloseHandle(fd);
             }
         }
-        buffer.clear();
         free_slots.clear();
+        for (std::size_t i = 0; i < buffer.size(); ++i)
+        {
+            free_slots.push_back(i);
+        }
         files.clear();
         free_files.clear();
-        pending = 0;
     }
 
     // open a file once so many reads can be submitted against it via submit(handle, ...).
@@ -118,7 +152,7 @@ export class Ring
     {
         HANDLE fd = ::CreateFileW(file.c_str(),
                                   GENERIC_READ,
-                                  FILE_SHARE_READ,
+                                  FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
                                   nullptr,
                                   OPEN_EXISTING,
                                   FILE_FLAG_SEQUENTIAL_SCAN,
@@ -145,35 +179,39 @@ export class Ring
 
     void close_file(size_t fh)
     {
-        if (files[fh] != INVALID_HANDLE_VALUE)
+        if (fh >= files.size() || files[fh] == INVALID_HANDLE_VALUE)
         {
-            ::CloseHandle(files[fh]);
-            files[fh] = INVALID_HANDLE_VALUE;
-            free_files.push_back(fh);
+            return;
         }
+        ::CloseHandle(files[fh]);
+        files[fh] = INVALID_HANDLE_VALUE;
+        free_files.push_back(fh);
     }
 
     // single-shot: opens the file and submits one read; the slot owns the fd and closes it on release.
     auto submit(const std::filesystem::path& file, size_t len, int64_t offset) -> std::expected<size_t, ErrorKind>
     {
-        // SQ-full guard: cannot queue more than the submission queue holds before a submit drains it
-        if (pending >= sq_entries)
+        if (len > (std::numeric_limits<UINT32>::max)())
         {
             return std::unexpected(ErrorKind::IOError);
         }
+        if (pending >= sq_entries)
+        {
+            return std::unexpected(ErrorKind::IOError); // backpressure, not a failure
+        }
 
-        // open the file for reading
         HANDLE fd = ::CreateFileW(file.c_str(),
                                   GENERIC_READ,
-                                  FILE_SHARE_READ,
+                                  FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
                                   nullptr,
                                   OPEN_EXISTING,
-                                  FILE_ATTRIBUTE_NORMAL,
+                                  FILE_FLAG_SEQUENTIAL_SCAN,
                                   nullptr);
         if (fd == INVALID_HANDLE_VALUE)
         {
             return std::unexpected(ErrorKind::FileError);
         }
+
         size_t tag = alloc_slot(len);
         buffer[tag].fd = fd; // slot owns this fd
         if (!queue_read(tag, fd, len, offset))
@@ -189,10 +227,19 @@ export class Ring
     // read against an already-open handle; the slot does not own the fd (close_file does).
     auto submit(size_t fh, size_t len, int64_t offset) -> std::expected<size_t, ErrorKind>
     {
+        if (fh >= files.size() || files[fh] == INVALID_HANDLE_VALUE)
+        {
+            return std::unexpected(ErrorKind::FileError);
+        }
+        if (len > (std::numeric_limits<UINT32>::max)())
+        {
+            return std::unexpected(ErrorKind::IOError);
+        }
         if (pending >= sq_entries)
         {
             return std::unexpected(ErrorKind::IOError);
         }
+
         size_t tag = alloc_slot(len);
         buffer[tag].fd = INVALID_HANDLE_VALUE; // the open handle owns the fd, not the slot
         if (!queue_read(tag, files[fh], len, offset))
@@ -208,33 +255,80 @@ export class Ring
         for (;;)
         {
             IORING_CQE cqe{};
-            HRESULT hr = ::PopIoRingCompletion(handle, &cqe);
-            if (hr == S_OK) // a completion was available
-            {
-                // flush any still-queued reads with WaitOperations =0, so we are not waiting!
-                if (pending > 0)
-                {
-                    UINT32 submitted = 0;
-                    ::SubmitIoRing(handle, 0, 0, &submitted);
-                    pending = 0;
-                }
+            const HRESULT hr = ::PopIoRingCompletion(handle, &cqe);
 
-                int res = SUCCEEDED(cqe.ResultCode) ? static_cast<int>(cqe.Information) : -1;
-                return Result{static_cast<size_t>(cqe.UserData), res};
+            if (hr == S_OK)
+            {
+                --inflight;
+                return Result{static_cast<size_t>(cqe.UserData), to_res(cqe)};
             }
 
-            // if completion queue empty, submit queued reads and block for at least one
-            UINT32 submitted = 0;
-            HRESULT s = ::SubmitIoRing(handle, 1, INFINITE, &submitted);
-            pending = 0;
-            if (FAILED(s))
+            if (hr != S_FALSE)
             {
                 return std::unexpected(ErrorKind::IOError);
+            }
+
+            if (pending == 0 && inflight == 0)
+            {
+                return std::unexpected(ErrorKind::Unknown);
+            }
+
+            if (pending > 0)
+            {
+                UINT32 submitted = 0;
+                const HRESULT s = ::SubmitIoRing(handle, 0, 0, &submitted);
+                if (FAILED(s))
+                {
+                    return std::unexpected(ErrorKind::IOError);
+                }
+
+                pending -= (std::min)(pending, static_cast<unsigned>(submitted));
+                inflight += static_cast<unsigned>(submitted);
+                continue; // go round and pop
+            }
+
+            // pending == 0 && inflight > 0: wait for the kernel.
+            if (have_event)
+            {
+                if (::WaitForSingleObject(completion_event, INFINITE) != WAIT_OBJECT_0)
+                {
+                    return std::unexpected(ErrorKind::IOError);
+                }
+            }
+            else
+            {
+                UINT32 submitted = 0;
+                if (FAILED(::SubmitIoRing(handle, 1, INFINITE, &submitted)))
+                {
+                    return std::unexpected(ErrorKind::IOError);
+                }
+            }
+        }
+    }
+
+    void drain()
+    {
+        while (pending > 0 || inflight > 0)
+        {
+            if (!next())
+            {
+                break; // Empty, or an error we cannot recover from
             }
         }
     }
 
   private:
+    static auto to_res(const IORING_CQE& cqe) -> int
+    {
+        if (SUCCEEDED(cqe.ResultCode))
+        {
+            return static_cast<int>(cqe.Information); // bytes actually read
+        }
+
+        const int code = static_cast<int>(HRESULT_CODE(cqe.ResultCode));
+        return code != 0 ? -code : -1;
+    }
+
     auto alloc_slot(size_t len) -> size_t
     {
         size_t tag;
@@ -246,9 +340,14 @@ export class Ring
         else
         {
             tag = buffer.size();
+
             buffer.emplace_back();
         }
-        buffer[tag].buf.resize(len);
+
+        if (buffer[tag].buf.size() < len)
+        {
+            buffer[tag].buf.resize(len);
+        }
         return tag;
     }
 
@@ -256,13 +355,13 @@ export class Ring
     {
         auto fileRef = IoRingHandleRefFromHandle(fd);
         auto bufRef = IoRingBufferRefFromPointer(buffer[tag].buf.data());
-        HRESULT hr = ::BuildIoRingReadFile(handle,
-                                           fileRef,
-                                           bufRef,
-                                           static_cast<UINT32>(len),
-                                           static_cast<UINT64>(offset),
-                                           static_cast<UINT_PTR>(tag),
-                                           IOSQE_FLAGS_NONE);
+        const HRESULT hr = ::BuildIoRingReadFile(handle,
+                                                 fileRef,
+                                                 bufRef,
+                                                 static_cast<UINT32>(len),
+                                                 static_cast<UINT64>(offset),
+                                                 static_cast<UINT_PTR>(tag),
+                                                 IOSQE_FLAGS_NONE);
         if (FAILED(hr))
         {
             return false;
@@ -271,11 +370,74 @@ export class Ring
         return true;
     }
 
+    void adopt(Ring& other) noexcept
+    {
+        handle = std::exchange(other.handle, nullptr);
+        completion_event = std::exchange(other.completion_event, nullptr);
+        have_event = std::exchange(other.have_event, false);
+        sq_entries = std::exchange(other.sq_entries, 0);
+        cq_entries = std::exchange(other.cq_entries, 0);
+        pending = std::exchange(other.pending, 0);
+        inflight = std::exchange(other.inflight, 0);
+        buffer = std::move(other.buffer);
+        free_slots = std::move(other.free_slots);
+        files = std::move(other.files);
+        free_files = std::move(other.free_files);
+        other.buffer.clear();
+        other.files.clear();
+    }
+
+    void teardown() noexcept
+    {
+        if (handle)
+        {
+            // Reap outstanding reads before the buffers they target go away.
+            drain();
+            ::CloseIoRing(handle);
+            handle = nullptr;
+        }
+
+        if (completion_event)
+        {
+            ::CloseHandle(completion_event);
+            completion_event = nullptr;
+        }
+        have_event = false;
+
+        for (const auto& d : buffer)
+        {
+            if (d.fd != INVALID_HANDLE_VALUE)
+            {
+                ::CloseHandle(d.fd);
+            }
+        }
+        for (HANDLE fd : files)
+        {
+            if (fd != INVALID_HANDLE_VALUE)
+            {
+                ::CloseHandle(fd);
+            }
+        }
+
+        buffer.clear();
+        files.clear();
+        free_slots.clear();
+        free_files.clear();
+        pending = 0;
+        inflight = 0;
+    }
+
     HIORING handle{};
+    HANDLE completion_event{nullptr};
+    bool have_event = false;
+
     std::vector<Data> buffer;
     std::vector<size_t> free_slots;
-    unsigned pending = 0;
+
+    unsigned pending = 0; // entries built into the SQ but not yet submitted
+    unsigned inflight = 0; // entries the kernel accepted but has not completed
     unsigned sq_entries = 0;
+    unsigned cq_entries = 0;
 
     std::vector<HANDLE> files;
     std::vector<size_t> free_files;
