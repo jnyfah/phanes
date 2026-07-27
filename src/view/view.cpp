@@ -125,10 +125,8 @@ void print_summary(std::ostream& os, const SummaryReport& report, const Director
     std::println(os);
 }
 
-void print_largest_files(std::ostream& os, const std::vector<FileId>& files, const DirectoryTree& tree)
+static void print_file_table(std::ostream& os, const std::vector<FileId>& files, const DirectoryTree& tree)
 {
-    std::println(os, "Largest {} Files", files.size());
-    std::println(os, "------------------------------------\n");
     std::print(os, "{:<40} {:>12}  {}\n", "Filename", "Size", "Location");
     std::print(os, "{:-<40} {:-<12}  {:-<20}\n", "", "", "");
 
@@ -141,6 +139,13 @@ void print_largest_files(std::ostream& os, const std::vector<FileId>& files, con
     }
 
     std::println(os);
+}
+
+void print_largest_files(std::ostream& os, const std::vector<FileId>& files, const DirectoryTree& tree)
+{
+    std::println(os, "Largest {} Files", files.size());
+    std::println(os, "------------------------------------\n");
+    print_file_table(os, files, tree);
 }
 
 void print_largest_directories(std::ostream& os, const std::vector<DirectoryId>& directories, const DirectoryTree& tree)
@@ -184,18 +189,7 @@ void print_symlinks(std::ostream& os, const std::vector<FileId>& files, const Di
 {
     std::println(os, "Symlinks");
     std::println(os, "--------------------------------------\n");
-    std::print(os, "{:<40} {:>12}  {}\n", "Filename", "Size", "Location");
-    std::print(os, "{:-<40} {:-<12}  {:-<20}\n", "", "", "");
-
-    for (const auto file_id : files)
-    {
-        const auto& file = tree.files[file_id];
-        auto dirid = file.parent;
-        auto parent = tree.directories[dirid].path;
-        std::print(os, "{:<40} {:>12}  {}\n", display_name(tree, file), format_size(file.size), parent.string());
-    }
-
-    std::println(os);
+    print_file_table(os, files, tree);
 }
 
 void print_recent_files(std::ostream& os,
