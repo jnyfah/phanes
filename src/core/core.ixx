@@ -22,9 +22,6 @@ export struct NameRef
     std::uint32_t len;
 };
 
-// Native path character type: wchar_t on Windows, char on POSIX. Filenames are
-// kept in this encoding end-to-end so building a path from a NameRef never
-// needs an encoding conversion (see FileNode/DirectoryTree::file_names below).
 export using NameChar = std::filesystem::path::value_type;
 export using NameView = std::basic_string_view<NameChar>;
 

@@ -10,8 +10,6 @@ module;
 
 module view;
 
-// Converts a filename kept in native path encoding (see core::NameView) to a
-// narrow string only at the point of display, not during scanning.
 static std::string display_name(const DirectoryTree& tree, const FileNode& file)
 {
     return std::filesystem::path(name_view(tree, file)).string();

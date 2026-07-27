@@ -183,7 +183,7 @@ auto prefilter_group(Ring& ring,
         // a file settles once all of its submitted reads are back
         if (a.arrived == a.submitted)
         {
-            if (a.submitted == static_cast<int>(expected)) // fully sampled -> hash in region order
+            if (a.submitted == static_cast<int>(expected))
             {
                 phanes_hash_reset(state);
                 for (size_t r = 0; r < a.has.size(); ++r)
@@ -387,8 +387,6 @@ std::generator<DuplicateGroup> group_files_by_size(const DirectoryTree& tree)
         {
             continue;
         }
-        // cloud-placeholder filtering happens lazily where the path is next needed
-        // (prefilter_group/hash_file), so this full-tree pass doesn't rebuild every path.
         ids.push_back(file.id);
     }
 

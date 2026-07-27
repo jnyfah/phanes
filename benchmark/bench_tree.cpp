@@ -29,8 +29,6 @@ fs::path make_unique_bench_path(std::string_view stem)
         std::format("{}_{}_{}", stem, now, std::hash<std::thread::id>{}(std::this_thread::get_id()));
 }
 
-// ASCII-only content, so a plain elementwise widen is a lossless stand-in for
-// a real narrow->native conversion in these synthetic benchmarks.
 fs::path::string_type to_name(std::string_view s)
 {
     return fs::path::string_type(s.begin(), s.end());
