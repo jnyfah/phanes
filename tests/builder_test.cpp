@@ -77,8 +77,7 @@ static const FileNode* find_file(const DirectoryTree& tree, const fs::path& p)
 {
     for (const auto& f : tree.files)
     {
-        std::string leaf(tree.file_names.data() + f.name.offset, f.name.len);
-        if (tree.directories[f.parent].path / leaf == p)
+        if (file_path(tree, f) == p)
             return &f;
     }
     return nullptr;

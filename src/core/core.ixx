@@ -5,6 +5,7 @@ module;
 #include <deque>
 #include <filesystem>
 #include <optional>
+#include <string_view>
 #include <vector>
 
 export module core;
@@ -20,6 +21,12 @@ export struct NameRef
     std::uint32_t offset;
     std::uint32_t len;
 };
+
+// Native path character type: wchar_t on Windows, char on POSIX. Filenames are
+// kept in this encoding end-to-end so building a path from a NameRef never
+// needs an encoding conversion (see FileNode/DirectoryTree::file_names below).
+export using NameChar = std::filesystem::path::value_type;
+export using NameView = std::basic_string_view<NameChar>;
 
 /* ---------- File node ---------- */
 
@@ -71,8 +78,18 @@ export struct DirectoryTree
     std::deque<DirectoryNode> directories;
     std::deque<ErrorRecord> errors;
 
-    std::vector<char> file_names;
+    std::vector<NameChar> file_names;
 
     std::chrono::sys_time<std::chrono::seconds> scan_started;
     std::chrono::sys_time<std::chrono::seconds> scan_finished;
 };
+
+export inline auto name_view(const DirectoryTree& tree, const FileNode& file) -> NameView
+{
+    return {tree.file_names.data() + file.name.offset, file.name.len};
+}
+
+export inline auto file_path(const DirectoryTree& tree, const FileNode& file) -> std::filesystem::path
+{
+    return tree.directories[file.parent].path / name_view(tree, file);
+}

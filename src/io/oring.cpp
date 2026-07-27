@@ -197,7 +197,7 @@ export class Ring
         }
         if (pending >= sq_entries)
         {
-            return std::unexpected(ErrorKind::Again); // backpressure, not a failure
+            return std::unexpected(ErrorKind::IOError); // backpressure, not a failure
         }
 
         HANDLE fd = ::CreateFileW(file.c_str(),
@@ -237,7 +237,7 @@ export class Ring
         }
         if (pending >= sq_entries)
         {
-            return std::unexpected(ErrorKind::Again);
+            return std::unexpected(ErrorKind::IOError);
         }
 
         size_t tag = alloc_slot(len);
@@ -270,7 +270,7 @@ export class Ring
 
             if (pending == 0 && inflight == 0)
             {
-                return std::unexpected(ErrorKind::Empty);
+                return std::unexpected(ErrorKind::Unknown);
             }
 
             if (pending > 0)

@@ -66,7 +66,7 @@ struct TreeBuilder
         FileNode file;
         file.id = id;
         file.parent = parent_id;
-        const auto leaf = path.filename().string();
+        const auto leaf = path.filename().native();
         file.name = {static_cast<std::uint32_t>(tree.file_names.size()), static_cast<std::uint32_t>(leaf.size())};
         tree.file_names.insert(tree.file_names.end(), leaf.begin(), leaf.end());
         file.size = size;

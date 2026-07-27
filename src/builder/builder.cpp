@@ -43,7 +43,7 @@ void Scanner::scan_directory(DirectoryId id)
     std::vector<DirectoryNode> local_dirs;
     std::vector<FileNode> local_files;
     std::vector<ErrorRecord> local_errors;
-    std::vector<char> local_arena;
+    std::vector<NameChar> local_arena;
 
     std::error_code type_ec, size_ec, time_ec, itr_ec;
 
@@ -79,12 +79,12 @@ void Scanner::scan_directory(DirectoryId id)
             local_dirs.push_back(std::move(directory));
             break;
         }
-        // file case todo make arena wstring or utf8 conversion
         case std::filesystem::file_type::regular:
         case std::filesystem::file_type::symlink:
         {
-
-            auto getRef = [&](const std::string& name)
+            // native() is already in NameChar's encoding (wchar_t on Windows, char on
+            // POSIX), so this is a plain copy into the arena, no conversion needed.
+            auto getRef = [&](const std::filesystem::path::string_type& name)
             {
                 NameRef ref{static_cast<std::uint32_t>(local_arena.size()), static_cast<std::uint32_t>(name.size())};
                 local_arena.insert(local_arena.end(), name.begin(), name.end());
@@ -95,7 +95,7 @@ void Scanner::scan_directory(DirectoryId id)
 
             FileNode file{};
             file.parent = id;
-            file.name = getRef(entry.path().filename().string());
+            file.name = getRef(entry.path().filename().native());
             file.is_symlink = is_symlink;
 
             if (!is_symlink)
