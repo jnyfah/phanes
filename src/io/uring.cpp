@@ -28,7 +28,13 @@ static auto io_uring_setup(unsigned entries, io_uring_params* p) -> int
 
 static auto io_uring_enter(int ring_fd, unsigned to_submit, unsigned min_complete, unsigned flags) -> int
 {
-    return static_cast<int>(::syscall(SYS_io_uring_enter, ring_fd, to_submit, min_complete, flags, nullptr, 0));
+    return static_cast<int>(::syscall(SYS_io_uring_enter,
+                                      ring_fd,
+                                      to_submit,
+                                      min_complete,
+                                      flags,
+                                      static_cast<void*>(nullptr),
+                                      static_cast<size_t>(0)));
 }
 
 struct SqRing
