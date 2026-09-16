@@ -22,13 +22,19 @@ Phanes is a fast, multithreaded command-line tool for analyzing filesystem struc
 
 ## Installation
 
+### Supported platforms
+
+Phanes currently supports **Linux** (x86-64) and **Windows** (x86-64) only.
+
+> **macOS is not supported yet.**.
+
 ### Prerequisites
 
 - [CMake](https://cmake.org/) 4.0 or later
 - A C++23-capable compiler:
-  - **Linux / macOS** -- Clang 18+ or GCC 13+
+  - **Linux** -- Clang 18+ or GCC 13+
   - **Windows** -- MSVC 19.38+ (Visual Studio 2022 17.8+)
-- [Ninja](https://ninja-build.org/) (for the default presets on Linux/macOS)
+- [Ninja](https://ninja-build.org/) (for the default presets on Linux)
 
 ### Build
 
@@ -37,7 +43,7 @@ git clone https://github.com/jnyfah/phanes.git
 cd phanes
 ```
 
-**Linux / macOS**
+**Linux**
 ```bash
 cmake --preset ninja-release
 cmake --build --preset ninja-release
